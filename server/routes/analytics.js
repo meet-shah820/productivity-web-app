@@ -36,11 +36,19 @@ router.get("/", async (_req, res) => {
 		for (const h of hist) {
 			const key = dayKey(new Date(h.occurredAt));
 			if (!xpByDay.has(key)) continue;
-			if (h.type === "quest_complete" || h.type === "focus_session") {
-				xpByDay.set(key, (xpByDay.get(key) || 0) + Math.max(0, h.xpChange));
+			// XP series should reflect undos (negative xpChange) and penalties too.
+			// We include quest_complete, focus_session, timeframe_bonus, and penalty_* events.
+			if (
+				h.type === "quest_complete" ||
+				h.type === "focus_session" ||
+				h.type === "timeframe_bonus" ||
+				h.type === "penalty_missed_day" ||
+				h.type === "penalty_timeframe_miss"
+			) {
+				xpByDay.set(key, (xpByDay.get(key) || 0) + (h.xpChange || 0));
 				if (h.type === "focus_session") {
 					// convert xp to hours ~ 9 xp/min
-					focusByDay.set(key, (focusByDay.get(key) || 0) + h.xpChange / (9 * 60));
+					focusByDay.set(key, (focusByDay.get(key) || 0) + (h.xpChange || 0) / (9 * 60));
 				}
 			}
 		}
@@ -91,14 +99,38 @@ router.get("/", async (_req, res) => {
 		const monthLevelsGained = monthHistory.filter((h) => h.type === "level_up").length;
 		const monthAchievements = monthHistory.filter((h) => h.type === "achievement_unlocked").length;
 
-		// Weekly quest completion series (last 4 weeks)
+		// Weekly quest completion series (last 4 weeks) — net-based so undos remove the completion.
 		const fourWeeksAgo = new Date(now);
 		fourWeeksAgo.setDate(now.getDate() - 27);
 		fourWeeksAgo.setHours(0, 0, 0, 0);
-		const hist4w = await History.find({ userId: user._id, occurredAt: { $gte: fourWeeksAgo }, type: "quest_complete", xpChange: { $gt: 0 } }).lean();
+		const questNet4w = await History.aggregate([
+			{
+				$match: {
+					userId: user._id,
+					type: "quest_complete",
+					questId: { $ne: null },
+					occurredAt: { $gte: fourWeeksAgo },
+				},
+			},
+			{
+				$group: {
+					_id: "$questId",
+					net: { $sum: "$xpChange" },
+					lastPositiveAt: {
+						$max: {
+							$cond: [{ $gt: ["$xpChange", 0] }, "$occurredAt", null],
+						},
+					},
+				},
+			},
+			{ $match: { net: { $gt: 0 } } },
+		]);
+
 		const weekBuckets = [0, 0, 0, 0];
-		for (const h of hist4w) {
-			const ageDays = Math.floor((now.getTime() - new Date(h.occurredAt).getTime()) / (1000 * 60 * 60 * 24));
+		for (const row of questNet4w) {
+			const at = row.lastPositiveAt ? new Date(row.lastPositiveAt) : null;
+			if (!at || Number.isNaN(at.getTime())) continue;
+			const ageDays = Math.floor((now.getTime() - at.getTime()) / (1000 * 60 * 60 * 24));
 			const idx = 3 - Math.min(3, Math.floor(ageDays / 7)); // oldest->newest mapping
 			weekBuckets[Math.max(0, Math.min(3, idx))] += 1;
 		}

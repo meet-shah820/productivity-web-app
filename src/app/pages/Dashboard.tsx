@@ -19,7 +19,7 @@ import { Button } from "../components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import { formatDistanceToNow } from "date-fns";
 import { useNavigate } from "react-router-dom";
-import { getDashboard, getRecentHistory, completeQuest, revertQuest, PROFILE_UPDATED_EVENT, RANK_UPDATED_EVENT } from "../utils/api";
+import { getDashboard, getRecentHistory, completeQuest, revertQuest, getStreakCalendar, PROFILE_UPDATED_EVENT, RANK_UPDATED_EVENT } from "../utils/api";
 
 /** Focus hours from API are decimal hours; display with lowercase unit `h` (e.g. 3.5h). */
 function formatFocusHours(hours: number): string {
@@ -27,6 +27,28 @@ function formatFocusHours(hours: number): string {
   const rounded = Math.round(hours * 10) / 10;
   const s = rounded % 1 === 0 ? String(rounded) : rounded.toFixed(1);
   return `${s}h`;
+}
+
+function ymd(d: Date): string {
+  const yy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+function startOfWeekMonday(d: Date): Date {
+  const x = new Date(d);
+  const day = x.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  x.setDate(x.getDate() + diff);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+function addDays(d: Date, delta: number): Date {
+  const x = new Date(d);
+  x.setDate(x.getDate() + delta);
+  return x;
 }
 
 export default function Dashboard() {
@@ -61,6 +83,12 @@ export default function Dashboard() {
     { id: string; type: "quest" | "level" | "achievement" | "focus"; message: string; xp?: number; at: string }[]
   >([]);
 
+  const [streakCard, setStreakCard] = useState<{ current: number; best: number; daysThisWeek: boolean[] }>({
+    current: 0,
+    best: 0,
+    daysThisWeek: [false, false, false, false, false, false, false],
+  });
+
   const [leveledUp, setLeveledUp] = useState(false);
 
   useEffect(() => {
@@ -76,6 +104,24 @@ export default function Dashboard() {
         if (mounted) setError("Failed to load dashboard");
       } finally {
         if (mounted) setLoading(false);
+      }
+      // Streak card should align with streak calendar: compute current/best + this week's completion flags.
+      try {
+        const now = new Date();
+        const weekStart = startOfWeekMonday(now);
+        const weekEnd = addDays(weekStart, 6);
+        const sc = await getStreakCalendar(ymd(weekStart), ymd(weekEnd));
+        const map = new Map((sc.days || []).map((d) => [d.date, !!d.hasCompletion]));
+        const daysThisWeek = Array.from({ length: 7 }, (_, i) => map.get(ymd(addDays(weekStart, i))) === true);
+        if (mounted) {
+          setStreakCard({
+            current: sc.currentStreak?.length ?? 0,
+            best: sc.longestStreak?.length ?? 0,
+            daysThisWeek,
+          });
+        }
+      } catch {
+        // ignore streak card failures; keep defaults
       }
       try {
         const hist = await getRecentHistory();
@@ -240,12 +286,6 @@ export default function Dashboard() {
       }
     } catch {}
   }
-
-  const streak = {
-    current: 12,
-    best: 28,
-    daysThisWeek: [true, true, true, true, true, false, false],
-  };
 
   return (
     <div className="min-h-full p-4 lg:p-8 space-y-6">
@@ -445,9 +485,9 @@ export default function Dashboard() {
                   <Flame className="w-6 h-6 text-orange-500" />
                 </div>
                 <div className="text-center py-4">
-                  <p className="text-5xl font-bold text-white mb-2">{streak.current}</p>
+                  <p className="text-5xl font-bold text-white mb-2">{streakCard.current}</p>
                   <p className="text-sm text-gray-400">Days in a row</p>
-                  <p className="text-xs text-orange-400 mt-2">Best: {streak.best} days</p>
+                  <p className="text-xs text-orange-400 mt-2">Best: {streakCard.best} days</p>
                 </div>
                 <div className="flex justify-between gap-1 mt-4">
                   {["M", "T", "W", "T", "F", "S", "S"].map((day, index) => (
@@ -455,7 +495,7 @@ export default function Dashboard() {
                       <p className="text-xs text-gray-500 mb-1">{day}</p>
                       <div
                         className={`h-2 rounded-full ${
-                          streak.daysThisWeek[index]
+                          streakCard.daysThisWeek[index]
                             ? "bg-gradient-to-r from-orange-500 to-red-500"
                             : "bg-white/10"
                         }`}
