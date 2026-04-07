@@ -37,6 +37,16 @@ const UserSchema = new mongoose.Schema(
 		rank: { type: String, enum: ["E", "D", "C", "B", "A", "S"], default: "E" },
 		stats: { type: StatsSchema, default: () => ({}) },
 		streak: { type: Number, default: 0 },
+		billing: {
+			/** free | starter | pro | elite */
+			tier: { type: String, enum: ["free", "starter", "pro", "elite"], default: "free" },
+			stripeCustomerId: { type: String, default: "" },
+			stripeSubscriptionId: { type: String, default: "" },
+			stripePriceId: { type: String, default: "" },
+			stripeStatus: { type: String, default: "" },
+			/** Unix ms timestamp of current period end (if known) */
+			currentPeriodEndMs: { type: Number, default: 0 },
+		},
 	},
 	{ timestamps: true }
 );

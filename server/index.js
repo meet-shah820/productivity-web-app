@@ -17,9 +17,11 @@ import historyRouter from "./routes/history.js";
 import profileRouter from "./routes/profile.js";
 import settingsRouter from "./routes/settings.js";
 import streakRouter from "./routes/streak.js";
+import billingRouter, { syncUserFromSubscription } from "./routes/billing.js";
 import "./jobs/cron.js";
 import "./jobs/penalties.js";
 import { attachUser } from "./middleware/auth.js";
+import Stripe from "stripe";
 
 // Prefer .env for real secrets. If missing, fall back to env.example to reduce "env not configured" confusion.
 const rootDir = path.resolve(process.cwd());
@@ -33,6 +35,42 @@ if (fs.existsSync(envPath)) {
 
 const app = express();
 app.use(cors());
+// Stripe webhooks require raw body. We mount the webhook route BEFORE JSON parsing.
+app.post("/api/billing/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+	try {
+		const secret = process.env.STRIPE_WEBHOOK_SECRET;
+		const key = process.env.STRIPE_SECRET_KEY;
+		if (!secret || !key) return res.status(500).send("Stripe webhook env not configured");
+
+		const stripe = new Stripe(key, { apiVersion: "2024-06-20" });
+		const sig = req.headers["stripe-signature"];
+		if (!sig || typeof sig !== "string") return res.status(400).send("Missing stripe-signature");
+
+		const event = stripe.webhooks.constructEvent(req.body, sig, secret);
+
+		if (event.type === "checkout.session.completed") {
+			// Subscription is created async; we’ll rely on subscription.updated too, but try to sync early when possible.
+			const session = event.data.object;
+			const subId = session?.subscription;
+			if (typeof subId === "string") {
+				const sub = await stripe.subscriptions.retrieve(subId, { expand: ["customer", "items.data.price"] });
+				await syncUserFromSubscription(sub);
+			}
+		}
+
+		if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
+			const sub = event.data.object;
+			await syncUserFromSubscription(sub);
+		}
+
+		return res.json({ received: true });
+	} catch (e) {
+		// eslint-disable-next-line no-console
+		console.error("Stripe webhook error", e);
+		return res.status(400).send("Webhook Error");
+	}
+});
+
 app.use(express.json({ limit: "4mb" }));
 app.use(attachUser);
 
@@ -71,6 +109,7 @@ app.use("/api/history", historyRouter);
 app.use("/api/profile", profileRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/streak", streakRouter);
+app.use("/api/billing", billingRouter);
 
 function startServer(preferredPort) {
 	const server = app.listen(preferredPort, () => {

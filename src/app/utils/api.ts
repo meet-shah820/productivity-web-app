@@ -215,6 +215,43 @@ export async function getRecentHistory() {
 	return res.json();
 }
 
+export type BillingStatus = {
+	tier: "free" | "starter" | "pro" | "elite";
+	stripeStatus: string;
+	currentPeriodEndMs: number;
+};
+
+export async function getBillingStatus(): Promise<BillingStatus> {
+	const res = await apiFetch("/api/billing/status");
+	if (!res.ok) throw new Error("Failed to load billing status");
+	return res.json();
+}
+
+export async function startCheckout(tier: "starter" | "pro" | "elite"): Promise<{ url: string }> {
+	const res = await apiFetch("/api/billing/checkout", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ tier }),
+	});
+	const out = await res.json().catch(() => ({}));
+	if (!res.ok) throw new Error((out as { error?: string }).error || "Failed to start checkout");
+	return out as { url: string };
+}
+
+export async function openBillingPortal(): Promise<{ url: string }> {
+	const res = await apiFetch("/api/billing/portal", { method: "POST" });
+	const out = await res.json().catch(() => ({}));
+	if (!res.ok) throw new Error((out as { error?: string }).error || "Failed to open portal");
+	return out as { url: string };
+}
+
+export async function refreshBilling(): Promise<BillingStatus & { ok: true }> {
+	const res = await apiFetch("/api/billing/refresh", { method: "POST" });
+	const out = await res.json().catch(() => ({}));
+	if (!res.ok) throw new Error((out as { error?: string }).error || "Failed to refresh billing");
+	return out as BillingStatus & { ok: true };
+}
+
 export type StreakCalendarDay = {
 	date: string;
 	completedCount: number;

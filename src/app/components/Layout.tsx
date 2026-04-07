@@ -15,6 +15,7 @@ import {
   Bell,
   Palette,
   Calendar,
+  CreditCard,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Button } from "./ui/button";
@@ -32,6 +33,7 @@ const navigation = [
   { name: "Streak", href: "/streak", icon: Calendar },
   { name: "Profile", href: "/profile", icon: User },
   { name: "Achievements", href: "/achievements", icon: Trophy },
+  { name: "Pricing", href: "/pricing", icon: CreditCard },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
 

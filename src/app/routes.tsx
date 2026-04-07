@@ -9,6 +9,7 @@ import Analytics from "./pages/Analytics";
 import Profile from "./pages/Profile";
 import Achievements from "./pages/Achievements";
 import Settings from "./pages/Settings";
+import Pricing from "./pages/Pricing";
 import Auth from "./pages/Auth";
 import AuthCallback from "./pages/AuthCallback";
 import { ProtectedLayout } from "./components/ProtectedLayout";
@@ -40,6 +41,7 @@ export const router = createBrowserRouter([
           { path: "streak", Component: Streak },
           { path: "profile", Component: Profile },
           { path: "achievements", Component: Achievements },
+          { path: "pricing", Component: Pricing },
           { path: "settings", Component: Settings },
         ],
       },
