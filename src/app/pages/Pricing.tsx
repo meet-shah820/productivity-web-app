@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { Check, CreditCard } from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { getBillingStatus, openBillingPortal, refreshBilling, startCheckout, type BillingStatus } from "../utils/api";
+import { chooseFreePlan, getBillingStatus, openBillingPortal, refreshBilling, startCheckout, type BillingStatus } from "../utils/api";
 
 type Tier = "free" | "starter" | "pro" | "elite";
 
@@ -66,6 +66,7 @@ export default function Pricing() {
 	const [status, setStatus] = useState<BillingStatus | null>(null);
 	const [busy, setBusy] = useState<string | null>(null);
 	const [msg, setMsg] = useState<string | null>(null);
+	const [onboarding, setOnboarding] = useState(false);
 
 	useEffect(() => {
 		(async () => {
@@ -73,6 +74,7 @@ export default function Pricing() {
 				// If user just returned from Stripe (success/cancel/portal_return), attempt a manual refresh.
 				const qs = new URLSearchParams(window.location.search);
 				const billingFlag = qs.get("billing");
+				setOnboarding(qs.get("onboarding") === "1");
 				if (billingFlag) {
 					try {
 						const refreshed = await refreshBilling();
@@ -96,6 +98,7 @@ export default function Pricing() {
 
 	const currentTier: Tier = (status?.tier as Tier) || "free";
 	const isPaid = currentTier !== "free";
+	const needsPlanChoice = onboarding && status != null && !status.onboarded;
 
 	const periodEndLabel = useMemo(() => {
 		if (!status?.currentPeriodEndMs) return "";
@@ -129,6 +132,20 @@ export default function Pricing() {
 		}
 	};
 
+	const handleChooseFree = async () => {
+		setMsg(null);
+		setBusy("free");
+		try {
+			await chooseFreePlan();
+			const s = await getBillingStatus();
+			setStatus(s);
+			window.location.href = "/";
+		} catch (e) {
+			setMsg(e instanceof Error ? e.message : "Failed to choose free plan");
+			setBusy(null);
+		}
+	};
+
 	return (
 		<div className="min-h-full p-4 lg:p-8 space-y-6">
 			<motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
@@ -140,12 +157,18 @@ export default function Pricing() {
 				</p>
 			</motion.div>
 
+			{needsPlanChoice ? (
+				<Card className="bg-[#111827] border-purple-500/30 p-4 text-sm text-gray-300">
+					<span className="text-white font-medium">Choose a plan to continue.</span> You can start on Free and upgrade anytime.
+				</Card>
+			) : null}
+
 			{msg ? <p className="text-sm text-amber-400">{msg}</p> : null}
 
 			<div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
 				{TIERS.map((t, idx) => {
 					const isCurrent = t.id === currentTier;
-					const isDisabled = t.id === "free" || busy != null;
+					const isDisabled = busy != null;
 					const highlight = t.id === "pro";
 					return (
 						<motion.div key={t.id} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 * idx }}>
@@ -180,8 +203,14 @@ export default function Pricing() {
 
 								<div className="mt-6 space-y-3">
 									{t.id === "free" ? (
-										<Button type="button" variant="outline" className="w-full border-purple-500/30 text-white hover:bg-white/5" disabled>
-											{isCurrent ? "Current plan" : "Free"}
+										<Button
+											type="button"
+											variant="outline"
+											className="w-full border-purple-500/30 text-white hover:bg-white/5"
+											disabled={isDisabled || (isCurrent && status?.onboarded)}
+											onClick={() => void handleChooseFree()}
+										>
+											{busy === "free" ? "Saving…" : isCurrent ? "Current plan" : "Choose Free"}
 										</Button>
 									) : (
 										<Button

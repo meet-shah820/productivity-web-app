@@ -22,20 +22,15 @@ import { Button } from "./ui/button";
 import { Progress } from "./ui/progress";
 import { motion, AnimatePresence } from "motion/react";
 import { getDashboard, getRecentHistory, PROFILE_UPDATED_EVENT, RANK_UPDATED_EVENT } from "../utils/api";
+import { getBillingStatus, type BillingStatus } from "../utils/api";
 
-const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Quests", href: "/quests", icon: Target },
-  { name: "Goals", href: "/goals", icon: Flag },
-  { name: "Focus Mode", href: "/focus", icon: Focus },
-  { name: "Skills", href: "/skills", icon: Zap },
-  { name: "Analytics", href: "/analytics", icon: BarChart3 },
-  { name: "Streak", href: "/streak", icon: Calendar },
-  { name: "Profile", href: "/profile", icon: User },
-  { name: "Achievements", href: "/achievements", icon: Trophy },
-  { name: "Pricing", href: "/pricing", icon: CreditCard },
-  { name: "Settings", href: "/settings", icon: Settings },
-];
+type Tier = "free" | "starter" | "pro" | "elite";
+function tierRank(t: Tier): number {
+  if (t === "starter") return 1;
+  if (t === "pro") return 2;
+  if (t === "elite") return 3;
+  return 0;
+}
 
 type NotifItem = {
   id: string;
@@ -92,6 +87,7 @@ export function Layout() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [dash, setDash] = useState<any>(null);
   const [recent, setRecent] = useState<NotifItem[]>([]);
+  const [billing, setBilling] = useState<BillingStatus | null>(null);
   const [lastSeenNotifMs, setLastSeenNotifMs] = useState<number>(() => readLastSeenNotifMs());
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +99,10 @@ export function Layout() {
       try {
         const r = await getRecentHistory();
         if (!cancelled) setRecent(r.items || []);
+      } catch {}
+      try {
+        const b = await getBillingStatus();
+        if (!cancelled) setBilling(b);
       } catch {}
     }
     void loadHeaderData();
@@ -120,6 +120,26 @@ export function Layout() {
       window.removeEventListener(RANK_UPDATED_EVENT, onRankUpdated);
     };
   }, []);
+
+  const tier: Tier = (billing?.tier as Tier) || "free";
+  const nav = useMemo(() => {
+    const t = tierRank(tier);
+    return [
+      { name: "Dashboard", href: "/", icon: LayoutDashboard },
+      { name: "Quests", href: "/quests", icon: Target },
+      { name: "Goals", href: "/goals", icon: Flag },
+      { name: "Focus Mode", href: "/focus", icon: Focus },
+      // Starter+ feature example
+      ...(t >= 1 ? [{ name: "Skills", href: "/skills", icon: Zap }] : []),
+      // Pro+ feature example
+      ...(t >= 2 ? [{ name: "Analytics", href: "/analytics", icon: BarChart3 }] : []),
+      { name: "Streak", href: "/streak", icon: Calendar },
+      { name: "Profile", href: "/profile", icon: User },
+      { name: "Achievements", href: "/achievements", icon: Trophy },
+      { name: "Pricing", href: "/pricing", icon: CreditCard },
+      { name: "Settings", href: "/settings", icon: Settings },
+    ];
+  }, [tier]);
   const user = useMemo(() => {
     if (!dash) {
       return { name: "Player", avatar: "", level: 1, currentXP: 0, maxXP: 100, rank: "E" };
@@ -207,7 +227,7 @@ export function Layout() {
 
           {/* Navigation */}
           <nav className="flex-1 px-3 py-6 space-y-1">
-            {navigation.map((item) => (
+            {nav.map((item) => (
               <NavLink
                 key={item.name}
                 to={item.href}
@@ -290,7 +310,7 @@ export function Layout() {
                 </div>
 
                 <nav className="flex-1 px-3 py-6 space-y-1">
-                  {navigation.map((item) => (
+                  {nav.map((item) => (
                     <NavLink
                       key={item.name}
                       to={item.href}

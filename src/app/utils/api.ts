@@ -217,6 +217,7 @@ export async function getRecentHistory() {
 
 export type BillingStatus = {
 	tier: "free" | "starter" | "pro" | "elite";
+	onboarded: boolean;
 	stripeStatus: string;
 	currentPeriodEndMs: number;
 };
@@ -250,6 +251,17 @@ export async function refreshBilling(): Promise<BillingStatus & { ok: true }> {
 	const out = await res.json().catch(() => ({}));
 	if (!res.ok) throw new Error((out as { error?: string }).error || "Failed to refresh billing");
 	return out as BillingStatus & { ok: true };
+}
+
+export async function chooseFreePlan(): Promise<{ ok: true; tier: "free"; onboarded: true }> {
+	const res = await apiFetch("/api/billing/choose", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ tier: "free" }),
+	});
+	const out = await res.json().catch(() => ({}));
+	if (!res.ok) throw new Error((out as { error?: string }).error || "Failed to choose plan");
+	return out as { ok: true; tier: "free"; onboarded: true };
 }
 
 export type StreakCalendarDay = {

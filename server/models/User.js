@@ -40,6 +40,8 @@ const UserSchema = new mongoose.Schema(
 		billing: {
 			/** free | starter | pro | elite */
 			tier: { type: String, enum: ["free", "starter", "pro", "elite"], default: "free" },
+			/** True once the user has picked a plan at least once (including Free). */
+			onboarded: { type: Boolean, default: false },
 			stripeCustomerId: { type: String, default: "" },
 			stripeSubscriptionId: { type: String, default: "" },
 			stripePriceId: { type: String, default: "" },

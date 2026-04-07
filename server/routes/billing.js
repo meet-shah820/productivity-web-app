@@ -84,6 +84,7 @@ router.get("/status", requireAuth, async (req, res) => {
 		const user = await User.findById(req.user._id).lean();
 		return res.json({
 			tier: user?.billing?.tier || "free",
+			onboarded: !!user?.billing?.onboarded,
 			stripeStatus: user?.billing?.stripeStatus || "",
 			currentPeriodEndMs: user?.billing?.currentPeriodEndMs || 0,
 		});
@@ -91,6 +92,28 @@ router.get("/status", requireAuth, async (req, res) => {
 		// eslint-disable-next-line no-console
 		console.error(e);
 		return res.status(500).json({ error: "Failed to load billing status" });
+	}
+});
+
+// POST /api/billing/choose { tier: "free" } — mark onboarding complete for free tier
+router.post("/choose", requireAuth, async (req, res) => {
+	try {
+		const { tier } = req.body || {};
+		if (String(tier) !== "free") return res.status(400).json({ error: "Only free tier can be chosen directly" });
+		const user = await User.findById(req.user._id);
+		if (!user) return res.status(401).json({ error: "Unauthorized" });
+		user.billing.tier = "free";
+		user.billing.onboarded = true;
+		user.billing.stripeSubscriptionId = "";
+		user.billing.stripePriceId = "";
+		user.billing.stripeStatus = "";
+		user.billing.currentPeriodEndMs = 0;
+		await user.save();
+		return res.json({ ok: true, tier: "free", onboarded: true });
+	} catch (e) {
+		// eslint-disable-next-line no-console
+		console.error(e);
+		return res.status(500).json({ error: "Failed to choose plan" });
 	}
 });
 
@@ -181,7 +204,13 @@ router.post("/refresh", requireAuth, async (req, res) => {
 		if (!user) return res.status(401).json({ error: "Unauthorized" });
 
 		if (!user.billing?.stripeCustomerId) {
-			return res.json({ ok: true, tier: user.billing?.tier || "free", stripeStatus: user.billing?.stripeStatus || "" });
+			return res.json({
+				ok: true,
+				tier: user.billing?.tier || "free",
+				onboarded: !!user.billing?.onboarded,
+				stripeStatus: user.billing?.stripeStatus || "",
+				currentPeriodEndMs: user.billing?.currentPeriodEndMs || 0,
+			});
 		}
 
 		const subs = await stripe.subscriptions.list({
@@ -205,6 +234,7 @@ router.post("/refresh", requireAuth, async (req, res) => {
 		return res.json({
 			ok: true,
 			tier: fresh?.billing?.tier || "free",
+			onboarded: !!fresh?.billing?.onboarded,
 			stripeStatus: fresh?.billing?.stripeStatus || "",
 			currentPeriodEndMs: fresh?.billing?.currentPeriodEndMs || 0,
 		});
@@ -231,6 +261,8 @@ export async function syncUserFromSubscription(sub) {
 	if (!user) return;
 
 	user.billing.tier = ["active", "trialing", "past_due", "unpaid"].includes(status) ? tier : "free";
+	// Mark onboarding complete once we see a subscription event at all.
+	user.billing.onboarded = true;
 	user.billing.stripeSubscriptionId = String(sub.id || "");
 	user.billing.stripePriceId = String(priceId || "");
 	user.billing.stripeStatus = String(status || "");
