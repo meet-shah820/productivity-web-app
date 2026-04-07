@@ -386,11 +386,6 @@ export default function Settings() {
                 </div>
               </div>
 
-              {/* Billing (below avatar options) */}
-              <div className="mb-6">
-                <BillingSection compactTitle />
-              </div>
-
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
