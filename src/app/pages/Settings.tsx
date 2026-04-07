@@ -85,7 +85,9 @@ export default function Settings() {
       setProfileHandle(u.username);
       setDisplayName(u.displayName || "");
       setUsername(u.username);
-      setUsernameAuto(!String(u.username || "").trim());
+      // If username is still the default reset value, treat it as "not chosen yet"
+      // so display name edits can auto-generate a better username.
+      setUsernameAuto(String(u.username || "").trim() === "shadow_hunter");
       setEmail(u.email || "");
       setBio(u.bio || "");
       setServerAvatar(u.avatarDataUrl || "");
@@ -205,7 +207,7 @@ export default function Settings() {
     if (!s) return;
     setDisplayName(s.displayName);
     setUsername(s.username);
-    setUsernameAuto(!String(s.username || "").trim());
+    setUsernameAuto(String(s.username || "").trim() === "shadow_hunter");
     setEmail(s.email);
     setBio(s.bio);
     setServerAvatar(s.serverAvatar);
@@ -389,7 +391,7 @@ export default function Settings() {
                         const cleaned = e.target.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
                         setUsername(cleaned);
                         // If the user clears username, resume auto-generation from display name.
-                        setUsernameAuto(cleaned.length === 0);
+                        setUsernameAuto(cleaned.length === 0 || cleaned === "shadow_hunter");
                       }}
                       placeholder="shadow_hunter"
                       maxLength={32}
