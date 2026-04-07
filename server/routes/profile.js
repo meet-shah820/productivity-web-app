@@ -47,7 +47,7 @@ function normalizeEmail(raw) {
 	return s;
 }
 
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
 	try {
 		const user = await getUserForReq(req);
 		// Net quests completed: if a quest is undone, it should not count.

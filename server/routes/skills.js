@@ -58,14 +58,13 @@ const SKILLS = [
 	{ id: "grand_industrialist", name: "Grand Industrialist", unlockLevel: 40, maxLevel: 5, category: "Business", description: "Scale operations into empires" },
 ];
 
-async function getUser() {
-	const user = await getUserForReq(req);
-	return user;
+async function getUser(req) {
+	return await getUserForReq(req);
 }
 
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
 	try {
-		const user = await getUser();
+		const user = await getUser(req);
 		// Make skills 5x harder to unlock
 		const withProgress = SKILLS.map((s) => {
 			const effectiveUnlock = Math.max(1, (s.unlockLevel || 1) * 5);

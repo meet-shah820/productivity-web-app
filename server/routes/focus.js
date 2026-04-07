@@ -15,7 +15,7 @@ const XP_PER_FOCUS_MINUTE = 9;
 // GET /api/focus/today-stats — sessions, focus duration, XP from focus today (local server day)
 router.get("/today-stats", async (_req, res) => {
 	try {
-		const user = await getUserForReq(req);
+		const user = await getUserForReq(_req);
 		const start = new Date();
 		start.setHours(0, 0, 0, 0);
 		const end = new Date();

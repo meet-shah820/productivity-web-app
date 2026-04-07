@@ -6,14 +6,13 @@ import { computeActivityStreakDays } from "../utils/activityStreak.js";
 
 const router = express.Router();
 
-async function getUser() {
-	const user = await getUserForReq(req);
-	return user;
+async function getUser(req) {
+	return await getUserForReq(req);
 }
 
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
 	try {
-		const user = await getUser();
+		const user = await getUser(req);
 		const now = new Date();
 		const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 		monthStart.setHours(0, 0, 0, 0);

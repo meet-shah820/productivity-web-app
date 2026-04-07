@@ -42,6 +42,23 @@ async function pickAvailableUsername(base) {
 	return `${normalized}_${Date.now()}`.slice(0, 30);
 }
 
+router.get("/oauth-health", (req, res) => {
+	const clientId = process.env.GOOGLE_CLIENT_ID;
+	const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+	const callbackUrl = process.env.GOOGLE_CALLBACK_URL || `${getServerOrigin(req)}/api/auth/google/callback`;
+	const successRedirect = process.env.OAUTH_SUCCESS_REDIRECT || "http://localhost:5173/auth/callback";
+	return res.json({
+		ok: true,
+		google: {
+			configured: !!clientId && !!clientSecret && !isPlaceholder(clientId) && !isPlaceholder(clientSecret),
+			hasClientId: !!clientId,
+			hasClientSecret: !!clientSecret,
+			callbackUrl,
+			successRedirect,
+		},
+	});
+});
+
 router.post("/signup", async (req, res) => {
 	try {
 		const { username, password } = req.body || {};

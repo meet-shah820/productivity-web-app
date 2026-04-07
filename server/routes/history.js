@@ -97,7 +97,7 @@ function mapHistoryDoc(doc) {
 // GET /api/history/recent — last 10 displayable events (quests, levels, achievements, focus)
 router.get("/recent", async (_req, res) => {
 	try {
-		const user = await getUserForReq(req);
+		const user = await getUserForReq(_req);
 		if (!user) return res.json({ items: [] });
 		const raw = await History.find({ userId: user._id })
 			.sort({ occurredAt: -1, createdAt: -1 })
