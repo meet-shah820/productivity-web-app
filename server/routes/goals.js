@@ -2,7 +2,7 @@ import express from "express";
 import mongoose from "mongoose";
 import Goal from "../models/Goal.js";
 import Quest from "../models/Quest.js";
-import { getOrCreateDemoUser } from "../utils/demoUser.js";
+import { getUserForReq } from "../utils/demoUser.js";
 import { generateDailyQuests, pickQuestsBalancedByDifficulty } from "../services/gemini.js";
 import { calculateLevelFromXp } from "../utils/level.js";
 import History from "../models/History.js";
@@ -26,9 +26,9 @@ function normalizeGoalRarity(g) {
 }
 
 // GET /api/goals — sorted by rarity: common → mythic (easiest → hardest)
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
 	try {
-		const user = await getOrCreateDemoUser();
+		const user = await getUserForReq(req);
 		const raw = await Goal.find({ userId: user._id, status: "active" }).lean();
 		if (raw.length === 0) {
 			await Quest.deleteMany({ userId: user._id });
@@ -64,7 +64,7 @@ router.post("/", async (req, res) => {
 				? String(rawRarity).toLowerCase()
 				: "common";
 
-		const user = await getOrCreateDemoUser();
+		const user = await getUserForReq(req);
 		const goalCategory = category || "general";
 		const goal = await Goal.create({
 			userId: user._id,
@@ -175,7 +175,7 @@ router.delete("/:id", async (req, res) => {
 		if (!mongoose.Types.ObjectId.isValid(id)) {
 			return res.status(400).json({ error: "Invalid goal id" });
 		}
-		const user = await getOrCreateDemoUser();
+		const user = await getUserForReq(req);
 		const goal = await Goal.findOneAndUpdate(
 			{ _id: id, userId: user._id },
 			{ status: "archived" },

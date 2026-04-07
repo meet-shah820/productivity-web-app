@@ -3,7 +3,7 @@ import User from "../models/User.js";
 import Quest from "../models/Quest.js";
 import History from "../models/History.js";
 import { calculateLevelFromXp } from "../utils/level.js";
-import { getOrCreateDemoUser } from "../utils/demoUser.js";
+import { getUserForReq } from "../utils/demoUser.js";
 import { computeActivityStreakDays } from "../utils/activityStreak.js";
 
 const router = express.Router();
@@ -31,9 +31,9 @@ async function sumTodayXpBuckets(userId, start, end) {
 }
 
 // GET /api/dashboard
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
 	try {
-		const user = await getOrCreateDemoUser();
+		const user = await getUserForReq(req);
 		// ensure level consistent with xp
 		const computedLevel = calculateLevelFromXp(user.xp);
 		if (computedLevel !== user.level) {

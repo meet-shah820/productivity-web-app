@@ -2,7 +2,7 @@ import express from "express";
 import mongoose from "mongoose";
 import Quest from "../models/Quest.js";
 import User from "../models/User.js";
-import { getOrCreateDemoUser } from "../utils/demoUser.js";
+import { getUserForReq } from "../utils/demoUser.js";
 import { calculateLevelFromXp } from "../utils/level.js";
 import History from "../models/History.js";
 import Goal from "../models/Goal.js";
@@ -114,7 +114,7 @@ router.get("/", async (req, res) => {
 		const timeframe = (req.query.timeframe || "daily").toString();
 		const goalId = req.query.goalId ? req.query.goalId.toString() : null;
 		const diffRaw = req.query.difficulty ? String(req.query.difficulty).toLowerCase() : null;
-		const userId = (await getOrCreateDemoUser())._id;
+		const userId = (await getUserForReq(req))._id;
 		let filter = { userId, type: timeframe };
 		if (goalId) filter = { ...filter, goalId };
 		if (diffRaw && ["easy", "medium", "hard"].includes(diffRaw)) {
@@ -186,7 +186,7 @@ router.get("/:id/details", async (req, res) => {
 		if (!mongoose.Types.ObjectId.isValid(id)) {
 			return res.status(400).json({ error: "Invalid quest id" });
 		}
-		const user = await getOrCreateDemoUser();
+		const user = await getUserForReq(req);
 		const quest = await Quest.findOne({ _id: id, userId: user._id });
 		if (!quest) {
 			return res.status(404).json({ error: "Quest not found" });

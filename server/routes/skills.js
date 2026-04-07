@@ -1,6 +1,6 @@
 import express from "express";
 import User from "../models/User.js";
-import { getOrCreateDemoUser } from "../utils/demoUser.js";
+import { getUserForReq } from "../utils/demoUser.js";
 
 const router = express.Router();
 
@@ -59,7 +59,7 @@ const SKILLS = [
 ];
 
 async function getUser() {
-	const user = await getOrCreateDemoUser();
+	const user = await getUserForReq(req);
 	return user;
 }
 

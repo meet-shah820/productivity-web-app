@@ -1,13 +1,13 @@
 import express from "express";
 import History from "../models/History.js";
 import User from "../models/User.js";
-import { getOrCreateDemoUser } from "../utils/demoUser.js";
+import { getUserForReq } from "../utils/demoUser.js";
 import { computeActivityStreakDays } from "../utils/activityStreak.js";
 
 const router = express.Router();
 
 async function getUser() {
-	const user = await getOrCreateDemoUser();
+	const user = await getUserForReq(req);
 	return user;
 }
 

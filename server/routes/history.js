@@ -1,6 +1,6 @@
 import express from "express";
 import History from "../models/History.js";
-import { getOrCreateDemoUser } from "../utils/demoUser.js";
+import { getUserForReq } from "../utils/demoUser.js";
 import { ACHIEVEMENTS } from "../data/achievements.js";
 
 const router = express.Router();
@@ -97,7 +97,7 @@ function mapHistoryDoc(doc) {
 // GET /api/history/recent — last 10 displayable events (quests, levels, achievements, focus)
 router.get("/recent", async (_req, res) => {
 	try {
-		const user = await getOrCreateDemoUser();
+		const user = await getUserForReq(req);
 		if (!user) return res.json({ items: [] });
 		const raw = await History.find({ userId: user._id })
 			.sort({ occurredAt: -1, createdAt: -1 })

@@ -13,3 +13,12 @@ export async function getOrCreateDemoUser() {
 	}
 	return user;
 }
+
+/**
+ * Prefer authenticated user (req.user) if present; otherwise fall back to demo user.
+ * This keeps "try without login" flows working while ensuring logged-in users are isolated.
+ */
+export async function getUserForReq(req) {
+	if (req?.user) return req.user;
+	return getOrCreateDemoUser();
+}

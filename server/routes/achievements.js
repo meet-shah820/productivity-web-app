@@ -1,6 +1,6 @@
 import express from "express";
 import History from "../models/History.js";
-import { getOrCreateDemoUser } from "../utils/demoUser.js";
+import { getUserForReq } from "../utils/demoUser.js";
 import Goal from "../models/Goal.js";
 import { ACHIEVEMENTS } from "../data/achievements.js";
 import AchievementUnlock from "../models/AchievementUnlock.js";
@@ -10,14 +10,9 @@ import { categoriesFromGoals, isAchievementApplicable } from "../utils/achieveme
 
 const router = express.Router();
 
-async function getUser() {
-	const user = await getOrCreateDemoUser();
-	return user;
-}
-
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
 	try {
-		const user = await getUser();
+		const user = await getUserForReq(req);
 		const goals = await Goal.find({ userId: user._id, status: "active" }).lean();
 		const categories = categoriesFromGoals(goals);
 

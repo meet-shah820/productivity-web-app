@@ -3,7 +3,7 @@ import User from "../models/User.js";
 import History from "../models/History.js";
 import AchievementUnlock from "../models/AchievementUnlock.js";
 import { ACHIEVEMENTS } from "../data/achievements.js";
-import { getOrCreateDemoUser } from "../utils/demoUser.js";
+import { getUserForReq } from "../utils/demoUser.js";
 import { computeActivityStreakDays } from "../utils/activityStreak.js";
 
 const router = express.Router();
@@ -49,7 +49,7 @@ function normalizeEmail(raw) {
 
 router.get("/", async (_req, res) => {
 	try {
-		const user = await getOrCreateDemoUser();
+		const user = await getUserForReq(req);
 		// Net quests completed: if a quest is undone, it should not count.
 		const netQuestAgg = await History.aggregate([
 			{
@@ -113,7 +113,7 @@ router.get("/", async (_req, res) => {
 /** PATCH /api/profile — partial updates: username, displayName, email, bio, avatarDataUrl, clearAvatar */
 router.patch("/", async (req, res) => {
 	try {
-		const user = await getOrCreateDemoUser();
+		const user = await getUserForReq(req);
 		const body = req.body || {};
 
 		if (body.username != null) {

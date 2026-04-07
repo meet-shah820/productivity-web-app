@@ -1,6 +1,6 @@
 import express from "express";
 import History from "../models/History.js";
-import { getOrCreateDemoUser } from "../utils/demoUser.js";
+import { getUserForReq } from "../utils/demoUser.js";
 
 const router = express.Router();
 
@@ -71,7 +71,7 @@ function computeStreaks(days) {
 // GET /api/streak/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD
 router.get("/calendar", async (req, res) => {
 	try {
-		const user = await getOrCreateDemoUser();
+		const user = await getUserForReq(req);
 		if (!user) return res.json({ days: [], current: { length: 0 }, longest: { length: 0 } });
 
 		const now = new Date();

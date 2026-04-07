@@ -1,17 +1,12 @@
 import express from "express";
 import User from "../models/User.js";
-import { getOrCreateDemoUser } from "../utils/demoUser.js";
+import { getUserForReq } from "../utils/demoUser.js";
 
 const router = express.Router();
 
-async function getUser() {
-	const user = await getOrCreateDemoUser();
-	return user;
-}
-
-router.get("/", async (_req, res) => {
+router.get("/", async (req, res) => {
 	try {
-		const user = await getUser();
+		const user = await getUserForReq(req);
 		return res.json({
 			notifications: user.preferences?.notifications || {},
 		});
@@ -24,7 +19,7 @@ router.get("/", async (_req, res) => {
 
 router.put("/", async (req, res) => {
 	try {
-		const user = await getUser();
+		const user = await getUserForReq(req);
 		const { notifications } = req.body || {};
 		if (notifications && typeof notifications === "object") {
 			user.preferences = user.preferences || {};

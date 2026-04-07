@@ -10,6 +10,17 @@ import { Separator } from "../components/ui/separator";
 import { Textarea } from "../components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "../components/ui/avatar";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "../components/ui/alert-dialog";
+import {
   changePassword,
   getSettings,
   resetAll,
@@ -51,6 +62,11 @@ export default function Settings() {
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
   const [pwSaving, setPwSaving] = useState(false);
   const [pwMsg, setPwMsg] = useState<string | null>(null);
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  // If true, username will be auto-generated from display name until the user edits username directly.
+  const [usernameAuto, setUsernameAuto] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -69,6 +85,7 @@ export default function Settings() {
       setProfileHandle(u.username);
       setDisplayName(u.displayName || "");
       setUsername(u.username);
+      setUsernameAuto(!String(u.username || "").trim());
       setEmail(u.email || "");
       setBio(u.bio || "");
       setServerAvatar(u.avatarDataUrl || "");
@@ -86,6 +103,19 @@ export default function Settings() {
       setProfileMsg("Could not load profile.");
     }
   }, []);
+
+  const toUsernameFromDisplayName = (name: string) => {
+    const base = String(name || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-z0-9_]/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 32);
+    if (base.length >= 3) return base;
+    return "shadow_hunter";
+  };
 
   useEffect(() => {
     void loadProfileFields();
@@ -175,6 +205,7 @@ export default function Settings() {
     if (!s) return;
     setDisplayName(s.displayName);
     setUsername(s.username);
+    setUsernameAuto(!String(s.username || "").trim());
     setEmail(s.email);
     setBio(s.bio);
     setServerAvatar(s.serverAvatar);
@@ -337,7 +368,13 @@ export default function Settings() {
                     <Input
                       id="name"
                       value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setDisplayName(next);
+                        if (usernameAuto) {
+                          setUsername(toUsernameFromDisplayName(next));
+                        }
+                      }}
                       placeholder="How your name appears in the app"
                       maxLength={64}
                       className="bg-[#1F2937] border-purple-500/30 text-white placeholder:text-gray-500"
@@ -348,9 +385,12 @@ export default function Settings() {
                     <Input
                       id="username"
                       value={username}
-                      onChange={(e) =>
-                        setUsername(e.target.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, ""))
-                      }
+                      onChange={(e) => {
+                        const cleaned = e.target.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
+                        setUsername(cleaned);
+                        // If the user clears username, resume auto-generation from display name.
+                        setUsernameAuto(cleaned.length === 0);
+                      }}
                       placeholder="shadow_hunter"
                       maxLength={32}
                       className="bg-[#1F2937] border-purple-500/30 text-white placeholder:text-gray-500"
@@ -562,18 +602,59 @@ export default function Settings() {
                       Permanently delete all your data and start over
                     </p>
                   </div>
-                  <Button
-                    variant="outline"
-                    className="border-red-500/50 text-red-400 hover:bg-red-500/10"
-                    onClick={async () => {
-                      try {
-                        await resetAll();
-                        window.location.reload();
-                      } catch {}
-                    }}
-                  >
-                    Reset
-                  </Button>
+                  <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="border-red-500/50 text-red-400 hover:bg-red-500/10"
+                        onClick={() => {
+                          setResetError(null);
+                        }}
+                      >
+                        Reset
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Reset all progress?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will permanently delete your goals, quests, streaks, and history. This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      {resetError && (
+                        <p className="text-sm text-red-400">
+                          {resetError}
+                        </p>
+                      )}
+                      <AlertDialogFooter>
+                        <AlertDialogCancel
+                          disabled={resetBusy}
+                          onClick={() => setResetError(null)}
+                        >
+                          Cancel
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                          disabled={resetBusy}
+                          className="bg-red-600 hover:bg-red-700"
+                          onClick={async (e) => {
+                            // Prevent Radix from auto-closing while we run the async reset.
+                            e.preventDefault();
+                            setResetBusy(true);
+                            setResetError(null);
+                            try {
+                              await resetAll();
+                              window.location.reload();
+                            } catch (err) {
+                              setResetError(err instanceof Error ? err.message : "Reset failed. Please try again.");
+                              setResetBusy(false);
+                            }
+                          }}
+                        >
+                          {resetBusy ? "Resetting..." : "Yes, reset"}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
 
                 <div className="flex items-center justify-between p-4 rounded-lg bg-black/20 border border-red-500/20">

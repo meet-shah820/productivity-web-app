@@ -1,6 +1,6 @@
 import express from "express";
 import User from "../models/User.js";
-import { getOrCreateDemoUser } from "../utils/demoUser.js";
+import { getUserForReq } from "../utils/demoUser.js";
 import { calculateLevelFromXp } from "../utils/level.js";
 import History from "../models/History.js";
 import Goal from "../models/Goal.js";
@@ -15,7 +15,7 @@ const XP_PER_FOCUS_MINUTE = 9;
 // GET /api/focus/today-stats — sessions, focus duration, XP from focus today (local server day)
 router.get("/today-stats", async (_req, res) => {
 	try {
-		const user = await getOrCreateDemoUser();
+		const user = await getUserForReq(req);
 		const start = new Date();
 		start.setHours(0, 0, 0, 0);
 		const end = new Date();
@@ -52,7 +52,7 @@ router.post("/complete", async (req, res) => {
 		const addXp = Number(xp) || 0;
 		if (addXp <= 0) return res.status(400).json({ error: "xp must be > 0" });
 
-		const user = await getOrCreateDemoUser();
+		const user = await getUserForReq(req);
 		const preLevel = calculateLevelFromXp(user.xp);
 		user.xp += addXp;
 		user.level = calculateLevelFromXp(user.xp);
