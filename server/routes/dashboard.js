@@ -15,7 +15,7 @@ const DAILY_FOCUS_TARGET_HOURS = 4;
 async function sumTodayXpBuckets(userId, start, end) {
 	const rows = await History.find({
 		userId,
-		createdAt: { $gte: start, $lte: end },
+		occurredAt: { $gte: start, $lte: end },
 		type: { $in: ["quest_complete", "focus_session", "timeframe_bonus"] },
 	})
 		.select("xpChange type")

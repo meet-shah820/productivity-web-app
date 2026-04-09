@@ -24,5 +24,10 @@ const HistorySchema = new mongoose.Schema(
 	{ timestamps: true }
 );
 
+// Common query patterns: "recent activity for user", "streak computation", dashboard totals.
+// Compound indexes dramatically reduce latency as history grows (especially for shared demo users).
+HistorySchema.index({ userId: 1, occurredAt: -1 });
+HistorySchema.index({ userId: 1, type: 1, occurredAt: -1 });
+
 export default mongoose.model("History", HistorySchema);
 
