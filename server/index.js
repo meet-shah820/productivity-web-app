@@ -35,6 +35,13 @@ if (fs.existsSync(envPath)) {
 
 const app = express();
 app.use(cors());
+// Stripe only POSTs to webhooks; GET helps verify the URL in a browser and avoids "Cannot GET".
+app.get("/api/billing/webhook", (_req, res) => {
+	res.status(200).json({
+		ok: true,
+		message: "Stripe webhook URL — use POST with application/json. Browser checks are GET only.",
+	});
+});
 // Stripe webhooks require raw body. We mount the webhook route BEFORE JSON parsing.
 app.post("/api/billing/webhook", express.raw({ type: "application/json" }), async (req, res) => {
 	try {
