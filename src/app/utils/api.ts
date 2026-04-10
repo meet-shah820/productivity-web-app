@@ -324,3 +324,58 @@ export async function getStreakCalendar(fromISO?: string, toISO?: string): Promi
 	if (!res.ok) throw new Error("Failed to load streak calendar");
 	return res.json();
 }
+
+export type LeaderboardEntry = {
+	position: number;
+	userId: string;
+	username: string;
+	displayName: string;
+	level: number;
+	xp: number;
+	rank: string;
+	statSum: number;
+};
+
+export type LeaderboardResponse = {
+	entries: LeaderboardEntry[];
+	totalUsers: number;
+	yourRank: LeaderboardEntry | null;
+	sort: string;
+};
+
+export async function getLeaderboard(limit = 50): Promise<LeaderboardResponse> {
+	const res = await apiFetch(`/api/leaderboard?limit=${encodeURIComponent(String(limit))}`);
+	if (!res.ok) throw new Error("Failed to load leaderboard");
+	return res.json();
+}
+
+const DEFAULT_DEV_API_ORIGIN = "http://127.0.0.1:5000";
+
+/**
+ * WebSocket URL for live leaderboard updates (requires auth token in localStorage).
+ * In dev, connects straight to the API host (not through the Vite WS proxy) to avoid flaky proxies / ECONNRESET.
+ */
+export function getLeaderboardWebSocketUrl(): string {
+	if (typeof window === "undefined") return "";
+	const token = localStorage.getItem("auth_token");
+	if (!token) return "";
+	const enc = encodeURIComponent(token);
+	const apiBase = (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_API_BASE) || "";
+	if (apiBase && /^https?:\/\//i.test(String(apiBase))) {
+		const u = new URL(String(apiBase));
+		const wsProto = u.protocol === "https:" ? "wss:" : "ws:";
+		return `${wsProto}//${u.host}/ws/leaderboard?token=${enc}`;
+	}
+	if (typeof import.meta !== "undefined" && (import.meta as any).env?.DEV) {
+		const raw = String((import.meta as any).env?.VITE_DEV_API_ORIGIN || DEFAULT_DEV_API_ORIGIN).replace(/\/$/, "");
+		try {
+			const u = new URL(raw);
+			const wsProto = u.protocol === "https:" ? "wss:" : "ws:";
+			return `${wsProto}//${u.host}/ws/leaderboard?token=${enc}`;
+		} catch {
+			/* fall through */
+		}
+	}
+	const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+	return `${proto}//${window.location.host}/ws/leaderboard?token=${enc}`;
+}

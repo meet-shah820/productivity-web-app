@@ -8,6 +8,7 @@ import History from "../models/History.js";
 import Goal from "../models/Goal.js";
 import { evaluateAndRecordAchievements } from "../services/achievementsEngine.js";
 import { recalculateAndSaveUserRank } from "../services/rankEngine.js";
+import { scheduleLeaderboardBroadcast } from "../services/leaderboardHub.js";
 import { generateQuestDetails } from "../services/gemini.js";
 import { computeQuestExpiry } from "../utils/timeframePeriod.js";
 import {
@@ -379,6 +380,8 @@ router.patch("/:id/revert", async (req, res) => {
 			questId: quest._id,
 			meta: { reverted: true, statType: quest.statType, title: quest.title },
 		});
+
+		scheduleLeaderboardBroadcast();
 
 		return res.json({
 			updated: true,

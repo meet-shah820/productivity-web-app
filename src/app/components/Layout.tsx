@@ -15,6 +15,7 @@ import {
   Bell,
   Palette,
   Calendar,
+  ListOrdered,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
 import { Button } from "./ui/button";
@@ -133,6 +134,7 @@ export function Layout() {
       // Pro+ feature example
       ...(t >= 2 ? [{ name: "Analytics", href: "/analytics", icon: BarChart3 }] : []),
       { name: "Streak", href: "/streak", icon: Calendar },
+      { name: "Leaderboard", href: "/leaderboard", icon: ListOrdered },
       { name: "Profile", href: "/profile", icon: User },
       { name: "Achievements", href: "/achievements", icon: Trophy },
       { name: "Settings", href: "/settings", icon: Settings },

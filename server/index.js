@@ -1,4 +1,5 @@
 import express from "express";
+import http from "node:http";
 import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -18,9 +19,11 @@ import profileRouter from "./routes/profile.js";
 import settingsRouter from "./routes/settings.js";
 import streakRouter from "./routes/streak.js";
 import billingRouter, { syncUserFromSubscription } from "./routes/billing.js";
+import leaderboardRouter from "./routes/leaderboard.js";
 import "./jobs/cron.js";
 import "./jobs/penalties.js";
 import { attachUser } from "./middleware/auth.js";
+import { attachLeaderboardWebSocket } from "./services/leaderboardHub.js";
 import Stripe from "stripe";
 
 // Prefer .env for real secrets. If missing, fall back to env.example to reduce "env not configured" confusion.
@@ -124,9 +127,13 @@ app.use("/api/profile", profileRouter);
 app.use("/api/settings", settingsRouter);
 app.use("/api/streak", streakRouter);
 app.use("/api/billing", billingRouter);
+app.use("/api/leaderboard", leaderboardRouter);
 
 function startServer(preferredPort) {
-	const server = app.listen(preferredPort, () => {
+	const server = http.createServer(app);
+	attachLeaderboardWebSocket(server);
+
+	server.listen(preferredPort, () => {
 		// eslint-disable-next-line no-console
 		console.log(`🚀 Server running on http://localhost:${preferredPort}`);
 	});

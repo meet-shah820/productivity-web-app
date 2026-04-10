@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import History from "../models/History.js";
 import { getOrCreateDemoUser } from "../utils/demoUser.js";
+import { scheduleLeaderboardBroadcast } from "../services/leaderboardHub.js";
 import {
 	startOfDay,
 	endOfDay,
@@ -17,6 +18,7 @@ async function applyXpChange(user, delta, type, meta, occurredAt = new Date()) {
 	if (xpChange === 0) return;
 	user.xp = newXp;
 	await user.save();
+	scheduleLeaderboardBroadcast();
 	await History.create({
 		userId: user._id,
 		type,

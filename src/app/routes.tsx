@@ -14,6 +14,7 @@ import Auth from "./pages/Auth";
 import AuthCallback from "./pages/AuthCallback";
 import { ProtectedLayout } from "./components/ProtectedLayout";
 import Streak from "./pages/Streak";
+import Leaderboard from "./pages/Leaderboard";
 
 export const router = createBrowserRouter([
   {
@@ -39,6 +40,7 @@ export const router = createBrowserRouter([
           { path: "skills", Component: Skills },
           { path: "analytics", Component: Analytics },
           { path: "streak", Component: Streak },
+          { path: "leaderboard", Component: Leaderboard },
           { path: "profile", Component: Profile },
           { path: "achievements", Component: Achievements },
           { path: "pricing", Component: Pricing },

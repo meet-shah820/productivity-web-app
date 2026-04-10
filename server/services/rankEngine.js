@@ -4,6 +4,7 @@ import AchievementUnlock from "../models/AchievementUnlock.js";
 import Goal from "../models/Goal.js";
 import { evaluateHunterRank } from "./gemini.js";
 import { computeActivityStreakDays } from "../utils/activityStreak.js";
+import { scheduleLeaderboardBroadcast } from "./leaderboardHub.js";
 
 const RANKS = ["E", "D", "C", "B", "A", "S"];
 const RANK_ORDER = Object.fromEntries(RANKS.map((r, i) => [r, i]));
@@ -94,6 +95,8 @@ export async function recalculateAndSaveUserRank(userId, options = {}) {
 	if (user.isModified("rank")) {
 		await user.save();
 	}
+
+	scheduleLeaderboardBroadcast();
 
 	return next;
 }
