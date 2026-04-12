@@ -45,6 +45,8 @@ const UserSchema = new mongoose.Schema(
 			/** Stripe subscription.status */
 			subscriptionStatus: { type: String, default: "" },
 			currentPeriodEnd: { type: Date, default: null },
+			/** True when subscription is set to cancel at period end (still active until then) */
+			cancelAtPeriodEnd: { type: Boolean, default: false },
 		},
 	},
 	{ timestamps: true }

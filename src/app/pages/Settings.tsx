@@ -31,7 +31,10 @@ import {
   PROFILE_UPDATED_EVENT,
   getBillingStatus,
   createBillingPortalSession,
+  cancelBillingSubscription,
+  resumeBillingSubscription,
   getBillingPaymentHistory,
+  BILLING_UPDATED_EVENT,
   type BillingPaymentRow,
 } from "../utils/api";
 import { toast } from "sonner";
@@ -63,7 +66,11 @@ export default function Settings() {
   const [billingStatus, setBillingStatus] = useState<string>("");
   const [billingPeriodEnd, setBillingPeriodEnd] = useState<string | null>(null);
   const [billingHasCustomer, setBillingHasCustomer] = useState(false);
+  const [billingCancelAtPeriodEnd, setBillingCancelAtPeriodEnd] = useState(false);
   const [portalBusy, setPortalBusy] = useState(false);
+  const [cancelSubOpen, setCancelSubOpen] = useState(false);
+  const [cancelSubBusy, setCancelSubBusy] = useState(false);
+  const [resumeSubBusy, setResumeSubBusy] = useState(false);
   const [paymentRows, setPaymentRows] = useState<BillingPaymentRow[]>([]);
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
@@ -84,6 +91,18 @@ export default function Settings() {
   // If true, username will be auto-generated from display name until the user edits username directly.
   const [usernameAuto, setUsernameAuto] = useState(false);
 
+  const billingTierNorm = (billingTier || "free").toLowerCase();
+  const billingStatusNorm = (billingStatus || "").toLowerCase();
+
+  const hasActivePaidSub =
+    ["starter", "pro", "elite"].includes(billingTierNorm) &&
+    ["active", "trialing", "past_due"].includes(billingStatusNorm);
+
+  const canOpenBillingPortal =
+    billingHasCustomer ||
+    (["starter", "pro", "elite"].includes(billingTierNorm) &&
+      ["active", "trialing", "past_due"].includes(billingStatusNorm));
+
   useEffect(() => {
     const tab = searchParams.get("tab");
     if (tab === "subscription" || tab === "profile" || tab === "notifications" || tab === "security") {
@@ -98,11 +117,13 @@ export default function Settings() {
       setBillingStatus(b.subscriptionStatus || "");
       setBillingPeriodEnd(b.currentPeriodEnd);
       setBillingHasCustomer(b.hasStripeCustomer);
+      setBillingCancelAtPeriodEnd(Boolean(b.cancelAtPeriodEnd));
     } catch {
       setBillingTier("free");
       setBillingStatus("");
       setBillingPeriodEnd(null);
       setBillingHasCustomer(false);
+      setBillingCancelAtPeriodEnd(false);
     }
   }, []);
 
@@ -523,136 +544,311 @@ export default function Settings() {
             <Card className="bg-[#111827] border-purple-500/20 p-6">
               <h2 className="text-xl font-bold text-white mb-2">Subscription</h2>
               <p className="text-sm text-gray-400 mb-6">
-                Your plan controls feature access (for example Analytics on Pro and above). Billing is processed securely by Stripe.
+                Your plan controls feature access (for example Analytics on Pro and above). Payments run through Stripe.
               </p>
-              <div className="space-y-4">
-                <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-lg bg-white/5 border border-purple-500/20">
-                  <div>
-                    <p className="text-xs text-gray-500 uppercase tracking-wide">Current tier</p>
-                    <p className="text-lg font-semibold text-white capitalize">{billingTier}</p>
-                    {billingStatus ? (
-                      <p className="text-xs text-gray-400 mt-1">Status: {billingStatus}</p>
-                    ) : null}
+
+              <div className="space-y-8">
+                {/* Current plan */}
+                <section className="space-y-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Current plan</h3>
+                  <div className="p-4 rounded-xl bg-white/5 border border-purple-500/20 space-y-2">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <div>
+                        <p className="text-2xl font-semibold text-white capitalize">{billingTier}</p>
+                        {billingStatus ? (
+                          <p className="text-sm text-gray-400 mt-1">Subscription status: {billingStatus}</p>
+                        ) : (
+                          <p className="text-sm text-gray-500 mt-1">No active Stripe subscription on file.</p>
+                        )}
+                      </div>
+                      {billingCancelAtPeriodEnd && hasActivePaidSub ? (
+                        <span className="text-xs font-medium px-2 py-1 rounded-md bg-amber-500/20 text-amber-200 border border-amber-500/40">
+                          Cancels at period end
+                        </span>
+                      ) : null}
+                    </div>
                     {billingPeriodEnd ? (
-                      <p className="text-xs text-gray-400 mt-1">
-                        Current period ends {new Date(billingPeriodEnd).toLocaleDateString()}
+                      <p className="text-xs text-gray-500">
+                        Current billing period ends{" "}
+                        <span className="text-gray-300">
+                          {new Date(billingPeriodEnd).toLocaleString(undefined, {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}
+                        </span>
                       </p>
                     ) : null}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <Button
-                    type="button"
-                    className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white"
-                    onClick={() => navigate("/pricing")}
-                  >
-                    View plans
-                  </Button>
-                  {billingHasCustomer ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="border-purple-500/30 text-white hover:bg-white/5"
-                      disabled={portalBusy}
-                      onClick={async () => {
-                        setPortalBusy(true);
-                        try {
-                          const { url } = await createBillingPortalSession();
-                          window.location.href = url;
-                        } catch (e) {
-                          setPortalBusy(false);
-                          const msg = e instanceof Error ? e.message : "Could not open portal.";
-                          toast.error(msg, { duration: 12000 });
-                        }
-                      }}
-                    >
-                      {portalBusy ? "Opening…" : "Manage billing"}
-                    </Button>
-                  ) : null}
-                </div>
-
-                <div className="pt-6 border-t border-purple-500/20">
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                    <h3 className="text-sm font-semibold text-white">Payment history</h3>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs text-indigo-300 hover:text-white h-8"
-                      disabled={paymentLoading}
-                      onClick={() => void loadPaymentHistory()}
-                    >
-                      {paymentLoading ? "Refreshing…" : "Refresh"}
-                    </Button>
-                  </div>
-                  <p className="text-xs text-gray-500 mb-3">
-                    Successful charges and paid invoices for this account (from Stripe).
-                  </p>
-                  {paymentError ? (
-                    <p className="text-sm text-amber-400">{paymentError}</p>
-                  ) : paymentLoading && paymentRows.length === 0 ? (
-                    <p className="text-sm text-gray-500">Loading…</p>
-                  ) : paymentRows.length === 0 ? (
-                    <p className="text-sm text-gray-500">
-                      {billingHasCustomer
-                        ? "No completed payments yet. After you subscribe, invoices appear here."
-                        : "Subscribe once to create a billing profile; your payments will show here."}
+                    <p className="text-xs text-gray-600 pt-1 border-t border-purple-500/10">
+                      Billing profile: {billingHasCustomer ? "Linked to Stripe" : "Not linked yet — subscribe once from Pricing."}
                     </p>
-                  ) : (
-                    <div className="overflow-x-auto rounded-lg border border-purple-500/20">
-                      <table className="w-full text-sm text-left">
-                        <thead>
-                          <tr className="border-b border-purple-500/20 text-xs text-gray-500 uppercase tracking-wide">
-                            <th className="px-3 py-2 font-medium">Date</th>
-                            <th className="px-3 py-2 font-medium">Description</th>
-                            <th className="px-3 py-2 font-medium text-right">Amount</th>
-                            <th className="px-3 py-2 font-medium">Receipt</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {paymentRows.map((row) => {
-                            const href = row.hostedInvoiceUrl || row.receiptUrl;
-                            const amount = (row.amount / 100).toLocaleString(undefined, {
-                              style: "currency",
-                              currency: row.currency.toUpperCase(),
-                            });
-                            return (
-                              <tr
-                                key={`${row.source}-${row.id}`}
-                                className="border-b border-purple-500/10 text-gray-300 last:border-0"
+                  </div>
+                </section>
+
+                {/* Manage Billing: actions + payment history + portal */}
+                <section className="space-y-4" aria-labelledby="manage-billing-heading">
+                  <h3 id="manage-billing-heading" className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    Manage Billing
+                  </h3>
+                  <div className="p-4 rounded-xl border border-indigo-500/25 bg-gradient-to-br from-indigo-500/5 to-purple-500/5 space-y-6">
+                    <p className="text-sm text-gray-400">
+                      View plans, open Stripe&apos;s customer portal for payment methods and invoices, and review your
+                      payment history below.
+                    </p>
+                    <div className="flex flex-wrap gap-3">
+                      <Button
+                        type="button"
+                        className="bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white"
+                        onClick={() => navigate("/pricing")}
+                      >
+                        View plans
+                      </Button>
+                      {canOpenBillingPortal ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-purple-500/40 text-white hover:bg-white/10 bg-white/5"
+                          disabled={portalBusy}
+                          onClick={async () => {
+                            setPortalBusy(true);
+                            try {
+                              const { url } = await createBillingPortalSession();
+                              window.location.href = url;
+                            } catch (e) {
+                              setPortalBusy(false);
+                              const msg = e instanceof Error ? e.message : "Could not open portal.";
+                              toast.error(msg, { duration: 12000 });
+                            }
+                          }}
+                        >
+                          {portalBusy ? "Opening…" : "Open billing portal"}
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-purple-500/20 text-gray-500 cursor-not-allowed opacity-70"
+                          disabled
+                          title="Subscribe from Pricing so we can link your Stripe customer."
+                        >
+                          Open billing portal
+                        </Button>
+                      )}
+                      {hasActivePaidSub && !billingCancelAtPeriodEnd ? (
+                        <AlertDialog open={cancelSubOpen} onOpenChange={setCancelSubOpen}>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="border-red-500/45 text-red-300 hover:bg-red-500/10"
+                            >
+                              Cancel subscription
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent className="bg-[#111827] border-purple-500/30 text-white">
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Cancel subscription?</AlertDialogTitle>
+                              <AlertDialogDescription className="text-gray-400">
+                                You can stop renewal at the end of this billing period and keep paid features until then, or end
+                                immediately and lose access right away (no automatic refund).
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:justify-end">
+                              <AlertDialogCancel
+                                className="border-purple-500/30 bg-transparent text-white hover:bg-white/10"
+                                disabled={cancelSubBusy}
                               >
-                                <td className="px-3 py-2.5 whitespace-nowrap text-gray-400">
-                                  {new Date(row.created).toLocaleString()}
-                                </td>
-                                <td className="px-3 py-2.5 max-w-[200px] sm:max-w-xs truncate" title={row.description}>
-                                  {row.description}
-                                </td>
-                                <td className="px-3 py-2.5 text-right text-white font-medium tabular-nums">
-                                  {amount}
-                                </td>
-                                <td className="px-3 py-2.5">
-                                  {href ? (
-                                    <a
-                                      href={href}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300 text-xs"
-                                    >
-                                      View
-                                      <ExternalLink className="w-3 h-3" />
-                                    </a>
-                                  ) : (
-                                    <span className="text-gray-600 text-xs">—</span>
-                                  )}
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                                Keep subscription
+                              </AlertDialogCancel>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="border-purple-500/30 text-white"
+                                disabled={cancelSubBusy}
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  setCancelSubBusy(true);
+                                  try {
+                                    await cancelBillingSubscription("period_end");
+                                    toast.success("Renewal canceled. You keep access until the end of this billing period.");
+                                    setCancelSubOpen(false);
+                                    void loadBilling();
+                                    void loadPaymentHistory();
+                                    window.dispatchEvent(new CustomEvent(BILLING_UPDATED_EVENT));
+                                  } catch (err) {
+                                    toast.error(err instanceof Error ? err.message : "Could not cancel.");
+                                  } finally {
+                                    setCancelSubBusy(false);
+                                  }
+                                }}
+                              >
+                                {cancelSubBusy ? "Working…" : "End after this period"}
+                              </Button>
+                              <AlertDialogAction
+                                className="bg-red-600 hover:bg-red-700 text-white"
+                                disabled={cancelSubBusy}
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  setCancelSubBusy(true);
+                                  try {
+                                    await cancelBillingSubscription("immediately");
+                                    toast.success("Subscription ended.");
+                                    setCancelSubOpen(false);
+                                    void loadBilling();
+                                    void loadPaymentHistory();
+                                    window.dispatchEvent(new CustomEvent(BILLING_UPDATED_EVENT));
+                                  } catch (err) {
+                                    toast.error(err instanceof Error ? err.message : "Could not cancel.");
+                                  } finally {
+                                    setCancelSubBusy(false);
+                                  }
+                                }}
+                              >
+                                End immediately
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="border-gray-600 text-gray-500"
+                          disabled
+                          title={
+                            !hasActivePaidSub
+                              ? "Subscribe to a paid plan first."
+                              : billingCancelAtPeriodEnd
+                                ? "Already canceling at period end — use Resume renewal to keep the plan."
+                                : undefined
+                          }
+                        >
+                          Cancel subscription
+                        </Button>
+                      )}
                     </div>
-                  )}
-                </div>
+
+                    {billingCancelAtPeriodEnd && hasActivePaidSub ? (
+                      <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 space-y-2">
+                        <p className="text-sm text-amber-100">
+                          Renewal is off; access continues until the end of this period.
+                          {billingPeriodEnd
+                            ? ` (${new Date(billingPeriodEnd).toLocaleDateString()})`
+                            : null}
+                        </p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="bg-gradient-to-r from-indigo-500 to-purple-600 text-white"
+                          disabled={resumeSubBusy}
+                          onClick={async () => {
+                            setResumeSubBusy(true);
+                            try {
+                              await resumeBillingSubscription();
+                              toast.success("Subscription will keep renewing.");
+                              void loadBilling();
+                              window.dispatchEvent(new CustomEvent(BILLING_UPDATED_EVENT));
+                            } catch (err) {
+                              toast.error(err instanceof Error ? err.message : "Could not resume.");
+                            } finally {
+                              setResumeSubBusy(false);
+                            }
+                          }}
+                        >
+                          {resumeSubBusy ? "Updating…" : "Resume renewal"}
+                        </Button>
+                      </div>
+                    ) : null}
+
+                    <div className="space-y-3 pt-2 border-t border-purple-500/15">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500">Payment history</h4>
+                          <p className="text-xs text-gray-600 mt-1">
+                            Successful charges and paid invoices for this account (from Stripe).
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs text-indigo-300 hover:text-white h-8 shrink-0"
+                          disabled={paymentLoading}
+                          onClick={() => void loadPaymentHistory()}
+                        >
+                          {paymentLoading ? "Refreshing…" : "Refresh"}
+                        </Button>
+                      </div>
+                      {paymentError ? (
+                        <p className="text-sm text-amber-400">{paymentError}</p>
+                      ) : paymentLoading && paymentRows.length === 0 ? (
+                        <p className="text-sm text-gray-500">Loading…</p>
+                      ) : paymentRows.length === 0 ? (
+                        <p className="text-sm text-gray-500">
+                          {billingHasCustomer
+                            ? "No completed payments yet. After you subscribe, invoices appear here."
+                            : "Subscribe once to create a billing profile; your payments will show here."}
+                        </p>
+                      ) : (
+                        <div className="overflow-x-auto rounded-lg border border-purple-500/20 bg-[#0B0F1A]/40">
+                          <table className="w-full text-sm text-left">
+                            <thead>
+                              <tr className="border-b border-purple-500/20 text-xs text-gray-500 uppercase tracking-wide">
+                                <th className="px-3 py-2 font-medium">Date</th>
+                                <th className="px-3 py-2 font-medium">Type</th>
+                                <th className="px-3 py-2 font-medium">Description</th>
+                                <th className="px-3 py-2 font-medium text-right">Amount</th>
+                                <th className="px-3 py-2 font-medium">Receipt</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {paymentRows.map((row) => {
+                                const href = row.hostedInvoiceUrl || row.receiptUrl;
+                                const amount = (row.amount / 100).toLocaleString(undefined, {
+                                  style: "currency",
+                                  currency: row.currency.toUpperCase(),
+                                });
+                                return (
+                                  <tr
+                                    key={`${row.source}-${row.id}`}
+                                    className="border-b border-purple-500/10 text-gray-300 last:border-0"
+                                  >
+                                    <td className="px-3 py-2.5 whitespace-nowrap text-gray-400">
+                                      {new Date(row.created).toLocaleString()}
+                                    </td>
+                                    <td className="px-3 py-2.5 text-gray-500 text-xs capitalize whitespace-nowrap">
+                                      {row.source === "invoice" ? "Invoice" : "Payment"}
+                                    </td>
+                                    <td className="px-3 py-2.5 max-w-[200px] sm:max-w-xs truncate" title={row.description}>
+                                      {row.description}
+                                    </td>
+                                    <td className="px-3 py-2.5 text-right text-white font-medium tabular-nums">
+                                      {amount}
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      {href ? (
+                                        <a
+                                          href={href}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300 text-xs"
+                                        >
+                                          View
+                                          <ExternalLink className="w-3 h-3" />
+                                        </a>
+                                      ) : (
+                                        <span className="text-gray-600 text-xs">—</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </section>
               </div>
             </Card>
           </motion.div>

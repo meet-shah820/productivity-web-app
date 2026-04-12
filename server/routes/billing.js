@@ -2,6 +2,7 @@ import express from "express";
 import User from "../models/User.js";
 import { requireAuth } from "../middleware/auth.js";
 import { getStripe } from "../services/stripeClient.js";
+import { resolveStripeCustomerIdForUser, syncUserFromSubscription } from "../services/billingSync.js";
 import {
 	PAID_TIER_IDS,
 	getStripePriceIdForTier,
@@ -226,6 +227,7 @@ router.get("/status", requireAuth, async (req, res) => {
 			tier: b.tier || "free",
 			subscriptionStatus: b.subscriptionStatus || "",
 			currentPeriodEnd: b.currentPeriodEnd ? new Date(b.currentPeriodEnd).toISOString() : null,
+			cancelAtPeriodEnd: Boolean(b.cancelAtPeriodEnd),
 			hasStripeCustomer: Boolean(b.stripeCustomerId),
 			checkoutAvailable: stripePricesConfigured() && Boolean(getStripe()),
 		});
@@ -334,10 +336,16 @@ router.post("/portal-session", requireAuth, async (req, res) => {
 	}
 
 	try {
-		const user = await User.findById(req.user._id).lean();
-		const customerId = user?.billing?.stripeCustomerId;
+		let customerId = String((await User.findById(req.user._id).lean())?.billing?.stripeCustomerId || "").trim();
 		if (!customerId) {
-			return res.status(400).json({ error: "No billing account found. Subscribe from the Pricing page first." });
+			customerId = (await resolveStripeCustomerIdForUser(stripe, String(req.user._id))) || "";
+		}
+		if (!customerId) {
+			return res.status(400).json({
+				error:
+					"No Stripe customer is linked to this account. If you subscribed already, ensure webhooks are configured; otherwise subscribe again from Pricing.",
+				code: "NO_STRIPE_CUSTOMER",
+			});
 		}
 
 		const origin = frontendOrigin(req);
@@ -382,6 +390,95 @@ router.post("/portal-session", requireAuth, async (req, res) => {
 		const fromStripe = readableStripeError(e);
 		return res.status(500).json({
 			error: fromStripe || "Failed to open billing portal",
+		});
+	}
+});
+
+// POST /api/billing/cancel-subscription — body: { when: "period_end" | "immediately" }
+router.post("/cancel-subscription", requireAuth, async (req, res) => {
+	const stripe = getStripe();
+	if (!stripe) {
+		return res.status(503).json({ error: "Stripe billing is not configured on this server." });
+	}
+
+	const when = req.body?.when === "immediately" ? "immediately" : "period_end";
+
+	try {
+		let user = await User.findById(req.user._id).exec();
+		if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+		if (!String(user.billing?.stripeSubscriptionId || "").trim()) {
+			await resolveStripeCustomerIdForUser(stripe, String(user._id));
+			user = await User.findById(req.user._id).exec();
+		}
+
+		const subId = String(user?.billing?.stripeSubscriptionId || "").trim();
+		if (!subId) {
+			return res.status(400).json({ error: "No active subscription found for this account." });
+		}
+
+		const sub = await stripe.subscriptions.retrieve(subId);
+		if (sub.metadata?.userId && sub.metadata.userId !== String(user._id)) {
+			return res.status(403).json({ error: "This subscription is not linked to your account." });
+		}
+
+		if (when === "immediately") {
+			const canceled = await stripe.subscriptions.cancel(subId);
+			await syncUserFromSubscription(canceled);
+		} else {
+			const updated = await stripe.subscriptions.update(subId, { cancel_at_period_end: true });
+			await syncUserFromSubscription(updated);
+		}
+
+		return res.json({ ok: true, when });
+	} catch (e) {
+		// eslint-disable-next-line no-console
+		console.error("cancel-subscription", e);
+		const fromStripe = readableStripeError(e);
+		return res.status(500).json({
+			error: fromStripe || "Failed to cancel subscription",
+		});
+	}
+});
+
+// POST /api/billing/resume-subscription — undo cancel-at-period-end
+router.post("/resume-subscription", requireAuth, async (req, res) => {
+	const stripe = getStripe();
+	if (!stripe) {
+		return res.status(503).json({ error: "Stripe billing is not configured on this server." });
+	}
+
+	try {
+		let user = await User.findById(req.user._id).exec();
+		if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+		if (!String(user.billing?.stripeSubscriptionId || "").trim()) {
+			await resolveStripeCustomerIdForUser(stripe, String(user._id));
+			user = await User.findById(req.user._id).exec();
+		}
+
+		const subId = String(user?.billing?.stripeSubscriptionId || "").trim();
+		if (!subId) {
+			return res.status(400).json({ error: "No subscription found." });
+		}
+
+		const sub = await stripe.subscriptions.retrieve(subId);
+		if (!sub.cancel_at_period_end) {
+			return res.status(400).json({ error: "Subscription is not scheduled for cancellation." });
+		}
+		if (sub.metadata?.userId && sub.metadata.userId !== String(user._id)) {
+			return res.status(403).json({ error: "This subscription is not linked to your account." });
+		}
+
+		const updated = await stripe.subscriptions.update(subId, { cancel_at_period_end: false });
+		await syncUserFromSubscription(updated);
+		return res.json({ ok: true });
+	} catch (e) {
+		// eslint-disable-next-line no-console
+		console.error("resume-subscription", e);
+		const fromStripe = readableStripeError(e);
+		return res.status(500).json({
+			error: fromStripe || "Failed to resume subscription",
 		});
 	}
 });

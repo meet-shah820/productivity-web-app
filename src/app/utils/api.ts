@@ -247,6 +247,7 @@ export type BillingStatus = {
 	tier: BillingTierId;
 	subscriptionStatus: string;
 	currentPeriodEnd: string | null;
+	cancelAtPeriodEnd: boolean;
 	hasStripeCustomer: boolean;
 	checkoutAvailable: boolean;
 };
@@ -299,6 +300,24 @@ export async function createBillingPortalSession(): Promise<{ url: string }> {
 	const body = await res.json().catch(() => ({}));
 	if (!res.ok) throw new Error((body as { error?: string }).error || "Failed to open billing portal");
 	return body as { url: string };
+}
+
+export async function cancelBillingSubscription(when: "period_end" | "immediately"): Promise<{ ok: boolean; when: string }> {
+	const res = await apiFetch("/api/billing/cancel-subscription", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ when }),
+	});
+	const body = await res.json().catch(() => ({}));
+	if (!res.ok) throw new Error((body as { error?: string }).error || "Failed to cancel subscription");
+	return body as { ok: boolean; when: string };
+}
+
+export async function resumeBillingSubscription(): Promise<{ ok: boolean }> {
+	const res = await apiFetch("/api/billing/resume-subscription", { method: "POST" });
+	const body = await res.json().catch(() => ({}));
+	if (!res.ok) throw new Error((body as { error?: string }).error || "Failed to resume subscription");
+	return body as { ok: boolean };
 }
 
 export type BillingPaymentRow = {
