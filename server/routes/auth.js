@@ -219,7 +219,7 @@ router.get("/google/callback", async (req, res) => {
 });
 
 /** Cancel Stripe if configured; never block account removal on billing API errors. */
-async function deleteAccountAndData(req, res) {
+export async function deleteAccountAndData(req, res) {
 	const userId = req.user._id;
 	try {
 		const user = await User.findById(userId).exec();
@@ -252,8 +252,9 @@ async function deleteAccountAndData(req, res) {
 
 // DELETE /api/auth/account — cancel Stripe (best effort), then remove user and app data
 router.delete("/account", requireAuth, deleteAccountAndData);
-// POST for hosts/proxies that block DELETE
+// POST fallbacks (some proxies block DELETE; nested path occasionally 404s on older deploys)
 router.post("/account/delete", requireAuth, deleteAccountAndData);
+router.post("/delete-account", requireAuth, deleteAccountAndData);
 
 router.post("/change-password", async (req, res) => {
 	try {

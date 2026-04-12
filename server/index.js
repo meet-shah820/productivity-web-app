@@ -10,7 +10,7 @@ import focusRouter from "./routes/focus.js";
 import achievementsRouter from "./routes/achievements.js";
 import analyticsRouter from "./routes/analytics.js";
 import skillsRouter from "./routes/skills.js";
-import authRouter from "./routes/auth.js";
+import authRouter, { deleteAccountAndData } from "./routes/auth.js";
 import adminRouter from "./routes/admin.js";
 import historyRouter from "./routes/history.js";
 import profileRouter from "./routes/profile.js";
@@ -21,7 +21,7 @@ import { billingWebhookHandler } from "./routes/billingWebhook.js";
 import leaderboardRouter from "./routes/leaderboard.js";
 import "./jobs/cron.js";
 import "./jobs/penalties.js";
-import { attachUser } from "./middleware/auth.js";
+import { attachUser, requireAuth } from "./middleware/auth.js";
 import { attachLeaderboardWebSocket } from "./services/leaderboardHub.js";
 
 loadProjectEnv({ mode: "server" });
@@ -35,6 +35,9 @@ app.post("/api/billing/webhook", express.raw({ type: "application/json" }), bill
 
 app.use(express.json({ limit: "4mb" }));
 app.use(attachUser);
+
+// Account deletion (duplicate mount so POST works even if /api/auth/* nesting fails on a proxy)
+app.post("/api/delete-account", requireAuth, deleteAccountAndData);
 
 const mongoUri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/productivity_app";
 mongoose

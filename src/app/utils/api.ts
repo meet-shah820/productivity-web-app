@@ -202,29 +202,50 @@ export async function resetAll() {
 	return res.json();
 }
 
-export async function deleteAccount(): Promise<{ ok: boolean }> {
-	let res = await apiFetch("/api/auth/account", { method: "DELETE" });
-	if (res.status === 405 || res.status === 404) {
-		res = await apiFetch("/api/auth/account/delete", { method: "POST" });
+function friendlyDeleteAccountError(status: number, text: string): string {
+	const t = text.trim();
+	if (t.includes("<!DOCTYPE") || t.includes("<html") || t.includes("<pre>Cannot")) {
+		return `The server could not delete your account (HTTP ${status}). Restart the API server so it has the latest routes, or check VITE_API_BASE points at your Express API.`;
 	}
-	const text = await res.text();
-	if (!res.ok) {
-		let msg = "Failed to delete account";
-		if (text.trim()) {
+	if (t) {
+		try {
+			const j = JSON.parse(t) as { error?: string };
+			if (typeof j?.error === "string" && j.error.trim()) return j.error.trim();
+		} catch {
+			return t.slice(0, 280);
+		}
+	}
+	return `Failed to delete account (HTTP ${status})`;
+}
+
+export async function deleteAccount(): Promise<{ ok: boolean }> {
+	const attempts: { path: string; method: string }[] = [
+		{ path: "/api/auth/account", method: "DELETE" },
+		{ path: "/api/delete-account", method: "POST" },
+		{ path: "/api/auth/delete-account", method: "POST" },
+		{ path: "/api/auth/account/delete", method: "POST" },
+	];
+
+	let lastStatus = 0;
+	let lastText = "";
+
+	for (const { path, method } of attempts) {
+		const res = await apiFetch(path, { method });
+		lastStatus = res.status;
+		lastText = await res.text();
+		if (res.ok) {
 			try {
-				const j = JSON.parse(text) as { error?: string };
-				if (typeof j?.error === "string" && j.error.trim()) msg = j.error.trim();
+				return lastText.trim() ? (JSON.parse(lastText) as { ok: boolean }) : { ok: true };
 			} catch {
-				msg = text.trim().slice(0, 280);
+				return { ok: true };
 			}
 		}
-		throw new Error(msg);
+		if (lastStatus !== 404 && lastStatus !== 405) {
+			throw new Error(friendlyDeleteAccountError(lastStatus, lastText));
+		}
 	}
-	try {
-		return text.trim() ? (JSON.parse(text) as { ok: boolean }) : { ok: true };
-	} catch {
-		return { ok: true };
-	}
+
+	throw new Error(friendlyDeleteAccountError(lastStatus, lastText));
 }
 
 export async function getQuests(timeframe: "daily" | "weekly" | "monthly", difficulty?: "easy" | "medium" | "hard") {
