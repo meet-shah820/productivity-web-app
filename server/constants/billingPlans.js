@@ -33,7 +33,10 @@ export function stripePricesConfigured() {
 	);
 }
 
-/** Static copy for GET /api/billing/plans (prices shown in UI; sync with your Stripe dashboard). */
+/**
+ * Tier copy + fallback cents if Stripe Price retrieve fails.
+ * Live Pricing page amounts come from Stripe via GET /api/billing/plans.
+ */
 export const TIER_CATALOG = [
 	{
 		id: "free",

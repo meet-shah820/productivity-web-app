@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "node --enable-source-maps ./node_modules/vite/bin/vite.js build",
-    "dev": "concurrently \"vite\" \"node server/index.js\""
+    "dev": "concurrently \"vite\" \"node server/index.js\"",
+    "stripe:bootstrap": "node server/scripts/stripeBootstrapPrices.js"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

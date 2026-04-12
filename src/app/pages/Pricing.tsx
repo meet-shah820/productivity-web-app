@@ -14,9 +14,12 @@ import {
 } from "../utils/api";
 import { toast } from "sonner";
 
-function formatMoney(cents: number) {
-	if (cents <= 0) return "$0";
-	return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(cents / 100);
+function formatMoney(cents: number, currency = "usd") {
+	const code = currency.length === 3 ? currency.toUpperCase() : "USD";
+	if (cents <= 0) {
+		return new Intl.NumberFormat(undefined, { style: "currency", currency: code }).format(0);
+	}
+	return new Intl.NumberFormat(undefined, { style: "currency", currency: code }).format(cents / 100);
 }
 
 export default function Pricing() {
@@ -101,7 +104,7 @@ export default function Pricing() {
 				<h1 className="text-3xl lg:text-4xl font-bold text-white">Choose your tier</h1>
 				<p className="text-gray-400 text-sm lg:text-base">
 					Free forever for core progression. Upgrade for analytics, deeper quests, and elite perks — billed monthly
-					through Stripe.
+					through Stripe. Shown prices load from your Stripe Price objects (same as Checkout).
 				</p>
 				{loaded && !checkoutAvailable ? (
 					<p className="text-amber-400/90 text-sm">
@@ -143,7 +146,9 @@ export default function Pricing() {
 								</div>
 
 								<div className="mb-6">
-									<span className="text-3xl font-bold text-white">{formatMoney(tier.monthlyPriceCents)}</span>
+									<span className="text-3xl font-bold text-white">
+										{formatMoney(tier.monthlyPriceCents, tier.currency || "usd")}
+									</span>
 									{tier.monthlyPriceCents > 0 ? (
 										<span className="text-gray-400 text-sm ml-1">/ month</span>
 									) : (

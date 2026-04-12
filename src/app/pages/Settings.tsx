@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useCallback, type ChangeEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
-import { User, Bell, Lock, LogOut, CreditCard } from "lucide-react";
+import { User, Bell, Lock, LogOut, CreditCard, ExternalLink } from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -31,7 +31,10 @@ import {
   PROFILE_UPDATED_EVENT,
   getBillingStatus,
   createBillingPortalSession,
+  getBillingPaymentHistory,
+  type BillingPaymentRow,
 } from "../utils/api";
+import { toast } from "sonner";
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -61,6 +64,9 @@ export default function Settings() {
   const [billingPeriodEnd, setBillingPeriodEnd] = useState<string | null>(null);
   const [billingHasCustomer, setBillingHasCustomer] = useState(false);
   const [portalBusy, setPortalBusy] = useState(false);
+  const [paymentRows, setPaymentRows] = useState<BillingPaymentRow[]>([]);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
   const [notif, setNotif] = useState({
     questReminders: true,
     levelUp: true,
@@ -103,6 +109,24 @@ export default function Settings() {
   useEffect(() => {
     void loadBilling();
   }, [loadBilling]);
+
+  const loadPaymentHistory = useCallback(async () => {
+    setPaymentLoading(true);
+    setPaymentError(null);
+    try {
+      const { payments } = await getBillingPaymentHistory();
+      setPaymentRows(payments);
+    } catch (e) {
+      setPaymentRows([]);
+      setPaymentError(e instanceof Error ? e.message : "Could not load payments.");
+    } finally {
+      setPaymentLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (active === "subscription") void loadPaymentHistory();
+  }, [active, loadPaymentHistory]);
 
   useEffect(() => {
     (async () => {
@@ -538,13 +562,96 @@ export default function Settings() {
                         } catch (e) {
                           setPortalBusy(false);
                           const msg = e instanceof Error ? e.message : "Could not open portal.";
-                          window.alert(msg);
+                          toast.error(msg, { duration: 12000 });
                         }
                       }}
                     >
                       {portalBusy ? "Opening…" : "Manage billing"}
                     </Button>
                   ) : null}
+                </div>
+
+                <div className="pt-6 border-t border-purple-500/20">
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <h3 className="text-sm font-semibold text-white">Payment history</h3>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs text-indigo-300 hover:text-white h-8"
+                      disabled={paymentLoading}
+                      onClick={() => void loadPaymentHistory()}
+                    >
+                      {paymentLoading ? "Refreshing…" : "Refresh"}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Successful charges and paid invoices for this account (from Stripe).
+                  </p>
+                  {paymentError ? (
+                    <p className="text-sm text-amber-400">{paymentError}</p>
+                  ) : paymentLoading && paymentRows.length === 0 ? (
+                    <p className="text-sm text-gray-500">Loading…</p>
+                  ) : paymentRows.length === 0 ? (
+                    <p className="text-sm text-gray-500">
+                      {billingHasCustomer
+                        ? "No completed payments yet. After you subscribe, invoices appear here."
+                        : "Subscribe once to create a billing profile; your payments will show here."}
+                    </p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-lg border border-purple-500/20">
+                      <table className="w-full text-sm text-left">
+                        <thead>
+                          <tr className="border-b border-purple-500/20 text-xs text-gray-500 uppercase tracking-wide">
+                            <th className="px-3 py-2 font-medium">Date</th>
+                            <th className="px-3 py-2 font-medium">Description</th>
+                            <th className="px-3 py-2 font-medium text-right">Amount</th>
+                            <th className="px-3 py-2 font-medium">Receipt</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {paymentRows.map((row) => {
+                            const href = row.hostedInvoiceUrl || row.receiptUrl;
+                            const amount = (row.amount / 100).toLocaleString(undefined, {
+                              style: "currency",
+                              currency: row.currency.toUpperCase(),
+                            });
+                            return (
+                              <tr
+                                key={`${row.source}-${row.id}`}
+                                className="border-b border-purple-500/10 text-gray-300 last:border-0"
+                              >
+                                <td className="px-3 py-2.5 whitespace-nowrap text-gray-400">
+                                  {new Date(row.created).toLocaleString()}
+                                </td>
+                                <td className="px-3 py-2.5 max-w-[200px] sm:max-w-xs truncate" title={row.description}>
+                                  {row.description}
+                                </td>
+                                <td className="px-3 py-2.5 text-right text-white font-medium tabular-nums">
+                                  {amount}
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  {href ? (
+                                    <a
+                                      href={href}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-indigo-400 hover:text-indigo-300 text-xs"
+                                    >
+                                      View
+                                      <ExternalLink className="w-3 h-3" />
+                                    </a>
+                                  ) : (
+                                    <span className="text-gray-600 text-xs">—</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               </div>
             </Card>

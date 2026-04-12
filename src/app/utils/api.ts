@@ -262,6 +262,10 @@ export type BillingPlanTier = {
 	name: string;
 	tagline: string;
 	monthlyPriceCents: number;
+	/** ISO 4217 from Stripe Price (e.g. usd, cad) */
+	currency: string;
+	/** stripe = from live Price retrieve; fallback = Stripe off or error */
+	pricingSource?: "stripe" | "fallback";
 	features: string[];
 	highlight?: boolean;
 	stripeConfigured: boolean;
@@ -295,6 +299,25 @@ export async function createBillingPortalSession(): Promise<{ url: string }> {
 	const body = await res.json().catch(() => ({}));
 	if (!res.ok) throw new Error((body as { error?: string }).error || "Failed to open billing portal");
 	return body as { url: string };
+}
+
+export type BillingPaymentRow = {
+	id: string;
+	source: string;
+	created: string;
+	amount: number;
+	currency: string;
+	status: string;
+	description: string;
+	receiptUrl: string | null;
+	hostedInvoiceUrl: string | null;
+};
+
+export async function getBillingPaymentHistory(): Promise<{ payments: BillingPaymentRow[] }> {
+	const res = await apiFetch("/api/billing/payment-history");
+	const body = await res.json().catch(() => ({}));
+	if (!res.ok) throw new Error((body as { error?: string }).error || "Failed to load payment history");
+	return body as { payments: BillingPaymentRow[] };
 }
 
 export type StreakCalendarDay = {
