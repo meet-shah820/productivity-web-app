@@ -23,6 +23,7 @@ import {
 } from "../components/ui/alert-dialog";
 import {
   changePassword,
+  deleteAccount,
   getSettings,
   resetAll,
   saveSettings,
@@ -88,6 +89,9 @@ export default function Settings() {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetBusy, setResetBusy] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
+  const [deleteAccountDialogOpen, setDeleteAccountDialogOpen] = useState(false);
+  const [deleteAccountBusy, setDeleteAccountBusy] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
   // If true, username will be auto-generated from display name until the user edits username directly.
   const [usernameAuto, setUsernameAuto] = useState(false);
 
@@ -1110,22 +1114,86 @@ export default function Settings() {
                   </AlertDialog>
                 </div>
 
-                <div className="flex items-center justify-between p-4 rounded-lg bg-black/20 border border-red-500/20">
-                  <div>
+                <div className="flex items-center justify-between gap-4 p-4 rounded-lg bg-black/20 border border-red-500/20">
+                  <div className="min-w-0">
                     <h3 className="text-sm font-medium text-white mb-1">
                       Delete Account
                     </h3>
                     <p className="text-xs text-gray-400">
-                      Permanently delete your account and all data
+                      Permanently delete your account and all data. Any active paid plan is canceled in Stripe immediately.
                     </p>
                   </div>
                   <Button
+                    type="button"
                     variant="outline"
-                    className="border-red-500/50 text-red-400 hover:bg-red-500/10"
+                    className="shrink-0 border-red-500/50 text-red-400 hover:bg-red-500/10"
+                    onClick={() => {
+                      setDeleteAccountError(null);
+                      setDeleteAccountDialogOpen(true);
+                    }}
                   >
                     Delete
                   </Button>
                 </div>
+
+                <AlertDialog
+                  open={deleteAccountDialogOpen}
+                  onOpenChange={(open) => {
+                    setDeleteAccountDialogOpen(open);
+                    if (!open) {
+                      setDeleteAccountError(null);
+                      setDeleteAccountBusy(false);
+                    }
+                  }}
+                >
+                  <AlertDialogContent className="border-purple-500/30 bg-[#111827] text-white sm:max-w-lg">
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="text-white">Delete your account?</AlertDialogTitle>
+                      <AlertDialogDescription className="text-gray-400">
+                        This permanently removes your profile, goals, quests, and history. If you have a subscription, it
+                        will be canceled right away and you will not be charged again.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    {deleteAccountError ? <p className="text-sm text-red-400">{deleteAccountError}</p> : null}
+                    <AlertDialogFooter>
+                      <AlertDialogCancel
+                        type="button"
+                        disabled={deleteAccountBusy}
+                        className="border-purple-500/30 bg-transparent text-white hover:bg-white/10"
+                        onClick={() => setDeleteAccountError(null)}
+                      >
+                        Cancel
+                      </AlertDialogCancel>
+                      <Button
+                        type="button"
+                        disabled={deleteAccountBusy}
+                        className="bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500/30"
+                        onClick={async () => {
+                          setDeleteAccountBusy(true);
+                          setDeleteAccountError(null);
+                          try {
+                            await deleteAccount();
+                            try {
+                              localStorage.removeItem("auth_token");
+                              localStorage.removeItem("last_username");
+                              sessionStorage.clear();
+                            } catch {
+                              /* ignore */
+                            }
+                            window.location.replace("/auth");
+                          } catch (err) {
+                            setDeleteAccountError(
+                              err instanceof Error ? err.message : "Delete failed. Please try again.",
+                            );
+                            setDeleteAccountBusy(false);
+                          }
+                        }}
+                      >
+                        {deleteAccountBusy ? "Deleting…" : "Yes, delete my account"}
+                      </Button>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </Card>
           </motion.div>

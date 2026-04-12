@@ -2,6 +2,13 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import Goal from "../models/Goal.js";
+import Quest from "../models/Quest.js";
+import History from "../models/History.js";
+import AchievementUnlock from "../models/AchievementUnlock.js";
+import { requireAuth } from "../middleware/auth.js";
+import { getStripe } from "../services/stripeClient.js";
+import { cancelStripeBillingForUser } from "../services/stripeAccountCleanup.js";
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "dev_secret_change_me";
@@ -210,6 +217,43 @@ router.get("/google/callback", async (req, res) => {
 		return res.status(500).send("Google callback failed");
 	}
 });
+
+/** Cancel Stripe if configured; never block account removal on billing API errors. */
+async function deleteAccountAndData(req, res) {
+	const userId = req.user._id;
+	try {
+		const user = await User.findById(userId).exec();
+		if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+		const stripe = getStripe();
+		if (stripe) {
+			try {
+				await cancelStripeBillingForUser(stripe, user);
+			} catch (stripeErr) {
+				// eslint-disable-next-line no-console
+				console.error("Account delete: Stripe cancel failed (continuing with data removal)", stripeErr);
+			}
+		}
+
+		await Quest.deleteMany({ userId });
+		await Goal.deleteMany({ userId });
+		await History.deleteMany({ userId });
+		await AchievementUnlock.deleteMany({ userId });
+		await User.findByIdAndDelete(userId);
+
+		return res.json({ ok: true });
+	} catch (e) {
+		// eslint-disable-next-line no-console
+		console.error("DELETE account", e);
+		const msg = e instanceof Error ? e.message : "Failed to delete account";
+		return res.status(500).json({ error: msg });
+	}
+}
+
+// DELETE /api/auth/account — cancel Stripe (best effort), then remove user and app data
+router.delete("/account", requireAuth, deleteAccountAndData);
+// POST for hosts/proxies that block DELETE
+router.post("/account/delete", requireAuth, deleteAccountAndData);
 
 router.post("/change-password", async (req, res) => {
 	try {

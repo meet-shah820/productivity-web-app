@@ -202,6 +202,31 @@ export async function resetAll() {
 	return res.json();
 }
 
+export async function deleteAccount(): Promise<{ ok: boolean }> {
+	let res = await apiFetch("/api/auth/account", { method: "DELETE" });
+	if (res.status === 405 || res.status === 404) {
+		res = await apiFetch("/api/auth/account/delete", { method: "POST" });
+	}
+	const text = await res.text();
+	if (!res.ok) {
+		let msg = "Failed to delete account";
+		if (text.trim()) {
+			try {
+				const j = JSON.parse(text) as { error?: string };
+				if (typeof j?.error === "string" && j.error.trim()) msg = j.error.trim();
+			} catch {
+				msg = text.trim().slice(0, 280);
+			}
+		}
+		throw new Error(msg);
+	}
+	try {
+		return text.trim() ? (JSON.parse(text) as { ok: boolean }) : { ok: true };
+	} catch {
+		return { ok: true };
+	}
+}
+
 export async function getQuests(timeframe: "daily" | "weekly" | "monthly", difficulty?: "easy" | "medium" | "hard") {
 	const params = new URLSearchParams({ timeframe });
 	if (difficulty) params.set("difficulty", difficulty);
