@@ -93,6 +93,44 @@ function frontendOrigin(req) {
 	return "http://localhost:5173";
 }
 
+/** Short-lived cache so GET /status does not hammer Stripe after GET /plans populated it. */
+let checkoutOkCache = { secretKey: "", expiresAt: 0, value: false };
+
+function setCheckoutOkCache(value) {
+	const secretKey = String(process.env.STRIPE_SECRET_KEY || "").trim();
+	checkoutOkCache = {
+		secretKey,
+		expiresAt: Date.now() + 60_000,
+		value,
+	};
+}
+
+/**
+ * @param {import("stripe").Stripe | null} stripe
+ */
+async function computeStripeCheckoutOk(stripe) {
+	const secretKey = String(process.env.STRIPE_SECRET_KEY || "").trim();
+	const now = Date.now();
+	if (secretKey && checkoutOkCache.secretKey === secretKey && now < checkoutOkCache.expiresAt) {
+		return checkoutOkCache.value;
+	}
+	let ok = Boolean(stripe) && stripePricesConfigured();
+	if (ok && stripe) {
+		for (const tier of PAID_TIER_IDS) {
+			try {
+				await stripe.prices.retrieve(getStripePriceIdForTier(tier));
+			} catch {
+				ok = false;
+				break;
+			}
+		}
+	} else {
+		ok = false;
+	}
+	setCheckoutOkCache(ok);
+	return ok;
+}
+
 /**
  * @param {import("stripe").Stripe | null} stripe
  * @param {string} tierId
@@ -107,6 +145,7 @@ async function resolveTierPricingFromStripe(stripe, tierId) {
 			monthlyPriceCents: tierId === "free" ? 0 : fallbackCents,
 			currency: "usd",
 			pricingSource: "fallback",
+			stripePriceReachable: false,
 		};
 	}
 
@@ -117,18 +156,24 @@ async function resolveTierPricingFromStripe(stripe, tierId) {
 				monthlyPriceCents: fallbackCents,
 				currency: (price.currency || "usd").toLowerCase(),
 				pricingSource: "fallback",
+				stripePriceReachable: true,
 			};
 		}
 		return {
 			monthlyPriceCents: price.unit_amount,
 			currency: (price.currency || "usd").toLowerCase(),
 			pricingSource: "stripe",
+			stripePriceReachable: true,
 		};
-	} catch {
+	} catch (err) {
+		const hint = readableStripeError(err) || (err instanceof Error ? err.message : "");
+		// eslint-disable-next-line no-console
+		console.warn(`[billing] price retrieve failed tier=${tierId} id=${priceId}:`, hint);
 		return {
 			monthlyPriceCents: fallbackCents,
 			currency: "usd",
 			pricingSource: "fallback",
+			stripePriceReachable: false,
 		};
 	}
 }
@@ -147,6 +192,7 @@ router.get("/plans", async (_req, res) => {
 						pricingSource: "stripe",
 						stripeConfigured: true,
 						hasPriceId: false,
+						stripePriceReachable: true,
 					};
 				}
 				const pricing = await resolveTierPricingFromStripe(stripe, t.id);
@@ -157,12 +203,23 @@ router.get("/plans", async (_req, res) => {
 					pricingSource: pricing.pricingSource,
 					stripeConfigured: stripePricesConfigured(),
 					hasPriceId: Boolean(getStripePriceIdForTier(t.id)),
+					stripePriceReachable: pricing.stripePriceReachable,
 				};
 			}),
 		);
+		const checkoutAvailable =
+			Boolean(stripe) &&
+			stripePricesConfigured() &&
+			tiers.filter((x) => x.id !== "free").every((x) => x.stripePriceReachable === true);
+		setCheckoutOkCache(checkoutAvailable);
+		const plansNotice =
+			Boolean(stripe) && stripePricesConfigured() && !checkoutAvailable
+				? "Price IDs are set, but this server's STRIPE_SECRET_KEY cannot load them — use the same Stripe account and Test/Live mode for the secret key and every STRIPE_PRICE_* (set all in Render; redeploy after changes)."
+				: null;
 		return res.json({
 			tiers,
-			checkoutAvailable: stripePricesConfigured() && Boolean(stripe),
+			checkoutAvailable,
+			plansNotice,
 		});
 	} catch (e) {
 		// eslint-disable-next-line no-console
@@ -252,13 +309,15 @@ router.get("/status", requireAuth, async (req, res) => {
 	try {
 		const user = await User.findById(req.user._id).lean();
 		const b = user?.billing || {};
+		const stripe = getStripe();
+		const checkoutAvailable = await computeStripeCheckoutOk(stripe);
 		return res.json({
 			tier: b.tier || "free",
 			subscriptionStatus: b.subscriptionStatus || "",
 			currentPeriodEnd: b.currentPeriodEnd ? new Date(b.currentPeriodEnd).toISOString() : null,
 			cancelAtPeriodEnd: Boolean(b.cancelAtPeriodEnd),
 			hasStripeCustomer: Boolean(b.stripeCustomerId),
-			checkoutAvailable: stripePricesConfigured() && Boolean(getStripe()),
+			checkoutAvailable,
 		});
 	} catch (e) {
 		// eslint-disable-next-line no-console
@@ -284,6 +343,13 @@ router.post("/checkout-session", requireAuth, async (req, res) => {
 		return res.status(503).json({ error: "Missing Stripe Price ID for this tier." });
 	}
 
+	if (!(await computeStripeCheckoutOk(stripe))) {
+		return res.status(503).json({
+			error:
+				"Checkout is unavailable: STRIPE_SECRET_KEY cannot load your Price IDs. Use the same Stripe account and Test/Live mode for the secret key and all STRIPE_PRICE_* variables (see Render Environment).",
+		});
+	}
+
 	try {
 		const user = await User.findById(req.user._id).exec();
 		if (!user) return res.status(401).json({ error: "Unauthorized" });
@@ -299,6 +365,8 @@ router.post("/checkout-session", requireAuth, async (req, res) => {
 		const origin = frontendOrigin(req);
 		const successUrl = `${origin}/pricing?checkout=success`;
 		const cancelUrl = `${origin}/pricing?checkout=canceled`;
+		const termsUrl = `${origin}/terms`;
+		const privacyUrl = `${origin}/privacy`;
 
 		/** @type {import("stripe").Stripe.Checkout.SessionCreateParams} */
 		const params = {
@@ -311,6 +379,11 @@ router.post("/checkout-session", requireAuth, async (req, res) => {
 			subscription_data: {
 				metadata: { userId: String(user._id), tier },
 			},
+			custom_text: {
+				submit: {
+					message: `By subscribing you agree to LevelUp Terms of Service (${termsUrl}) and Privacy Policy (${privacyUrl}). Payments are processed by Stripe; refunds follow our Terms. Stripe's policies also apply at checkout.`,
+				},
+			},
 		};
 
 		if (user.billing?.stripeCustomerId) {
@@ -320,7 +393,9 @@ router.post("/checkout-session", requireAuth, async (req, res) => {
 			if (email) params.customer_email = email;
 		}
 
-		const baseIdempotencyKey = `checkout_${user._id}_${tier}`;
+		// Include priceId so changing STRIPE_PRICE_* env vars does not replay an old Stripe idempotent
+		// response (same user+tier used to pin deleted prices and broke Checkout for existing accounts).
+		const baseIdempotencyKey = `checkout_${user._id}_${tier}_${priceId}`;
 
 		let session;
 		try {

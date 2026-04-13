@@ -329,11 +329,15 @@ export type BillingPlanTier = {
 	highlight?: boolean;
 	stripeConfigured: boolean;
 	hasPriceId: boolean;
+	/** False when STRIPE_SECRET_KEY cannot retrieve this tier's Price object */
+	stripePriceReachable?: boolean;
 };
 
 export type BillingPlansResponse = {
 	tiers: BillingPlanTier[];
 	checkoutAvailable: boolean;
+	/** Shown when Price IDs are set but secret key cannot load them (account / mode mismatch) */
+	plansNotice?: string | null;
 };
 
 export async function getBillingPlans(): Promise<BillingPlansResponse> {

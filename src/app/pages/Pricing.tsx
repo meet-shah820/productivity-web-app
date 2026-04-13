@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
 import { Check, Sparkles } from "lucide-react";
 import { Card } from "../components/ui/card";
@@ -16,6 +16,7 @@ import {
 } from "../utils/api";
 import { toast } from "sonner";
 import { setAuthReturnPath } from "../utils/authRedirect";
+import { LegalFooterLinks } from "../components/legal/LegalFooterLinks";
 
 function formatMoney(cents: number, currency = "usd") {
 	const code = currency.length === 3 ? currency.toUpperCase() : "USD";
@@ -38,6 +39,7 @@ export default function Pricing() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const [tiers, setTiers] = useState<BillingPlanTier[]>([]);
 	const [checkoutAvailable, setCheckoutAvailable] = useState(false);
+	const [plansNotice, setPlansNotice] = useState<string | null>(null);
 	const [currentTier, setCurrentTier] = useState<BillingTierId>("free");
 	const [signedIn, setSignedIn] = useState(readSignedIn);
 	const [loadingTier, setLoadingTier] = useState<BillingTierId | null>(null);
@@ -51,6 +53,7 @@ export default function Pricing() {
 				if (!cancelled) {
 					setTiers(plans.tiers);
 					setCheckoutAvailable(plans.checkoutAvailable);
+					setPlansNotice(plans.plansNotice ?? null);
 				}
 			} catch {
 				if (!cancelled) toast.error("Could not load plans.");
@@ -143,16 +146,49 @@ export default function Pricing() {
 				<h1 className="text-3xl lg:text-4xl font-bold text-white">Choose your tier</h1>
 				<p className="text-gray-400 text-sm lg:text-base">
 					Free forever for core progression. Upgrade for analytics, deeper quests, and elite perks — billed monthly
-					through Stripe. Shown prices load from your Stripe Price objects (same as Checkout).
+					through Stripe. Amounts show live Stripe prices when your server can load each Price ID; otherwise catalog
+					estimates are shown and Subscribe stays off until keys match.
 				</p>
 				{loaded && !signedIn ? (
 					<p className="text-gray-500 text-sm">Sign in to subscribe. Browse plans below anytime.</p>
 				) : null}
-				{loaded && !checkoutAvailable ? (
+				{loaded && plansNotice ? (
+					<p className="text-amber-400/90 text-sm max-w-xl mx-auto">{plansNotice}</p>
+				) : null}
+				{loaded && !checkoutAvailable && !plansNotice ? (
 					<p className="text-amber-400/90 text-sm">
 						Checkout is not configured (set Stripe keys and monthly Price IDs in the server environment).
 					</p>
 				) : null}
+				<p className="text-gray-500 text-xs max-w-2xl mx-auto leading-relaxed">
+					Paid plans are subject to our{" "}
+					<Link to="/terms" className="text-indigo-400 hover:text-indigo-300 underline-offset-2 hover:underline">
+						Terms of Service
+					</Link>{" "}
+					(including refunds) and{" "}
+					<Link to="/privacy" className="text-indigo-400 hover:text-indigo-300 underline-offset-2 hover:underline">
+						Privacy Policy
+					</Link>
+					. At checkout,{" "}
+					<a
+						href="https://stripe.com/privacy"
+						target="_blank"
+						rel="noopener noreferrer"
+						className="text-indigo-400 hover:text-indigo-300 underline-offset-2 hover:underline"
+					>
+						Stripe&apos;s privacy policy
+					</a>{" "}
+					and{" "}
+					<a
+						href="https://stripe.com/legal"
+						target="_blank"
+						rel="noopener noreferrer"
+						className="text-indigo-400 hover:text-indigo-300 underline-offset-2 hover:underline"
+					>
+						terms
+					</a>{" "}
+					apply. Subscriptions are billed by Stripe; taxes may apply.
+				</p>
 			</motion.div>
 
 			<div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 max-w-7xl mx-auto">
@@ -239,6 +275,8 @@ export default function Pricing() {
 					);
 				})}
 			</div>
+
+			<LegalFooterLinks className="pt-4" />
 		</div>
 	);
 }

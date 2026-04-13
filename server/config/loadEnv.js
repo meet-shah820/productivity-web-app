@@ -21,6 +21,13 @@ function findEnvFile() {
  */
 export function loadProjectEnv(opts = {}) {
 	const scriptMode = opts.mode === "script";
+	const onRender = String(process.env.RENDER || "").toLowerCase() === "true";
+	// Render injects env in the dashboard. A stray `.env` in the deploy bundle can supply
+	// STRIPE_SECRET_KEY while Price IDs come from the dashboard (or vice versa) → "No such price".
+	if (!scriptMode && process.env.NODE_ENV === "production" && onRender) {
+		return;
+	}
+
 	const envPath = findEnvFile();
 	const envExample = path.join(process.cwd(), "env.example");
 	const envExampleParent = path.join(process.cwd(), "..", "env.example");

@@ -30,6 +30,7 @@ import {
   BILLING_UPDATED_EVENT,
 } from "../utils/api";
 import { getBillingStatus, type BillingStatus } from "../utils/api";
+import { LegalFooterLinks } from "./legal/LegalFooterLinks";
 
 type Tier = "free" | "starter" | "pro" | "elite";
 function tierRank(t: Tier): number {
@@ -457,8 +458,13 @@ export function Layout() {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-auto">
-          <Outlet />
+        <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <div className="flex-1 overflow-auto">
+            <Outlet />
+          </div>
+          <footer className="shrink-0 border-t border-purple-500/15 bg-[#0B0F1A]/80 backdrop-blur-sm py-3 px-4">
+            <LegalFooterLinks />
+          </footer>
         </main>
       </div>
     </div>

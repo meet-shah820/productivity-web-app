@@ -13,6 +13,8 @@ export function normalizeStripePriceId(raw) {
 	if (raw == null) return "";
 	let s = String(raw).replace(/^\uFEFF/, "").trim();
 	if (!s) return "";
+	// Line breaks / unicode spaces from dashboard or Render paste
+	s = s.replace(/[\r\n\u00a0\u200b\u202f\uFEFF]/g, "").trim();
 	// Repeatedly unwrap quotes (e.g. "\"price_xxx\"" from a bad paste)
 	for (let i = 0; i < 3; i++) {
 		const next = s.replace(/^['"]+|['"]+$/g, "").trim();

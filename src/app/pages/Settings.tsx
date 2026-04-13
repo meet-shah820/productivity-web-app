@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback, type ChangeEvent } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
 import { User, Bell, Lock, LogOut, CreditCard, ExternalLink } from "lucide-react";
 import { Card } from "../components/ui/card";
@@ -579,8 +579,21 @@ export default function Settings() {
           >
             <Card className="bg-[#111827] border-purple-500/20 p-6">
               <h2 className="text-xl font-bold text-white mb-2">Subscription</h2>
-              <p className="text-sm text-gray-400 mb-6">
+              <p className="text-sm text-gray-400 mb-2">
                 Your plan controls feature access (for example Analytics on Pro and above). Payments run through Stripe.
+              </p>
+              <p className="text-xs text-gray-500 mb-6 leading-relaxed">
+                <Link to="/terms" className="text-indigo-400 hover:text-indigo-300 underline-offset-2 hover:underline">
+                  Terms of Service
+                </Link>
+                {" · "}
+                <Link to="/privacy" className="text-indigo-400 hover:text-indigo-300 underline-offset-2 hover:underline">
+                  Privacy Policy
+                </Link>
+                {" · "}
+                <Link to="/legal/refunds" className="text-indigo-400 hover:text-indigo-300 underline-offset-2 hover:underline">
+                  Refunds (supplement)
+                </Link>
               </p>
 
               <div className="space-y-8">
