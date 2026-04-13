@@ -73,11 +73,15 @@ router.get("/oauth-health", (req, res) => {
 router.post("/signup", async (req, res) => {
 	try {
 		const { username, password } = req.body || {};
-		if (!username || !password) return res.status(400).json({ error: "username and password required" });
-		const existing = await User.findOne({ username });
+		if (typeof username !== "string" || typeof password !== "string") {
+			return res.status(400).json({ error: "username and password required" });
+		}
+		const name = username.trim();
+		if (!name) return res.status(400).json({ error: "username required" });
+		const existing = await User.findOne({ username: name });
 		if (existing) return res.status(409).json({ error: "username taken" });
 		const hashed = await bcrypt.hash(password, 10);
-		const user = await User.create({ username, password: hashed });
+		const user = await User.create({ username: name, password: hashed });
 		const token = makeJwt(user);
 		return res.json({ token });
 	} catch (e) {
@@ -90,8 +94,12 @@ router.post("/signup", async (req, res) => {
 router.post("/login", async (req, res) => {
 	try {
 		const { username, password } = req.body || {};
-		if (!username || !password) return res.status(400).json({ error: "username and password required" });
-		const user = await User.findOne({ username });
+		if (typeof username !== "string" || typeof password !== "string") {
+			return res.status(400).json({ error: "username and password required" });
+		}
+		const name = username.trim();
+		if (!name) return res.status(400).json({ error: "username required" });
+		const user = await User.findOne({ username: name });
 		if (!user || !user.password) return res.status(401).json({ error: "invalid credentials" });
 		const ok = await bcrypt.compare(password, user.password);
 		if (!ok) return res.status(401).json({ error: "invalid credentials" });
@@ -101,6 +109,51 @@ router.post("/login", async (req, res) => {
 		// eslint-disable-next-line no-console
 		console.error(e);
 		return res.status(500).json({ error: "failed to login" });
+	}
+});
+
+/** New anonymous account (no password). Each call creates a distinct user. */
+router.post("/guest-signup", async (req, res) => {
+	try {
+		const username = await pickAvailableUsername("guest");
+		const user = await User.create({ username, password: null, isGuest: true });
+		const token = makeJwt(user);
+		return res.json({ token, username: user.username });
+	} catch (e) {
+		// eslint-disable-next-line no-console
+		console.error(e);
+		return res.status(500).json({ error: "failed to create guest account" });
+	}
+});
+
+/**
+ * Continue a saved guest session (same browser). Requires a valid JWT for a user with isGuest.
+ */
+router.post("/guest-login", async (req, res) => {
+	try {
+		const raw = req.headers?.authorization || req.headers?.Authorization;
+		const header = Array.isArray(raw) ? raw[0] : raw;
+		if (!header || typeof header !== "string") {
+			return res.status(401).json({ error: "no saved guest session" });
+		}
+		const m = header.match(/^Bearer\s+(.+)$/i);
+		if (!m) return res.status(401).json({ error: "no saved guest session" });
+		let payload;
+		try {
+			payload = jwt.verify(m[1], JWT_SECRET);
+		} catch {
+			return res.status(401).json({ error: "session expired — use Guest sign up" });
+		}
+		const uid = payload?.uid;
+		if (!uid) return res.status(401).json({ error: "invalid session" });
+		const user = await User.findById(uid).exec();
+		if (!user?.isGuest) return res.status(401).json({ error: "not a guest account — sign in with username or Google" });
+		const token = makeJwt(user);
+		return res.json({ token, username: user.username });
+	} catch (e) {
+		// eslint-disable-next-line no-console
+		console.error(e);
+		return res.status(500).json({ error: "failed to restore guest session" });
 	}
 });
 
@@ -259,7 +312,11 @@ router.post("/delete-account", requireAuth, deleteAccountAndData);
 router.post("/change-password", async (req, res) => {
 	try {
 		const { username, currentPassword, newPassword } = req.body || {};
-		if (!username || !currentPassword || !newPassword) {
+		if (
+			typeof username !== "string" ||
+			typeof currentPassword !== "string" ||
+			typeof newPassword !== "string"
+		) {
 			return res.status(400).json({ error: "username, currentPassword, newPassword required" });
 		}
 		const user = await User.findOne({ username });

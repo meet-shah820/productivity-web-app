@@ -14,6 +14,8 @@ const UserSchema = new mongoose.Schema(
 	{
 		username: { type: String, required: true, unique: true },
 		password: { type: String },
+		/** Anonymous app trial; password null; not the same as OAuth (googleId set there). */
+		isGuest: { type: Boolean, default: false },
 		/** Google OAuth subject ("sub") - unique per Google account */
 		googleId: { type: String, default: null, unique: true, sparse: true, index: true },
 		/** Shown in UI; falls back to formatted username if empty */
