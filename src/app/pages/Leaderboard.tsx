@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { motion } from "motion/react";
@@ -6,6 +6,16 @@ import { getLeaderboard, getLeaderboardWebSocketUrl, type LeaderboardEntry, type
 import { Radio, Trophy } from "lucide-react";
 
 const RANK_TABS = ["E", "D", "C", "B", "A", "S"] as const;
+
+/** E is lowest; higher tiers unlock as Hunter rank promotions. */
+const RANK_ORDER: Record<(typeof RANK_TABS)[number], number> = {
+	E: 0,
+	D: 1,
+	C: 2,
+	B: 3,
+	A: 4,
+	S: 5,
+};
 
 function formatXp(n: number): string {
 	if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -88,6 +98,22 @@ export default function Leaderboard() {
 	const yourId = data?.yourRank?.userId;
 	const bracketHighlight = selectedRank ?? data?.rankBracket ?? null;
 
+	const visibleRankTabs = useMemo(() => {
+		const v = data?.viewerHunterRank;
+		if (!v) return [] as (typeof RANK_TABS)[number][];
+		const maxI = RANK_ORDER[v as keyof typeof RANK_ORDER];
+		const cap = maxI !== undefined ? maxI : 0;
+		return RANK_TABS.filter((r) => RANK_ORDER[r] <= cap);
+	}, [data?.viewerHunterRank]);
+
+	useEffect(() => {
+		const v = data?.viewerHunterRank;
+		if (!v || selectedRank === null) return;
+		const maxI = RANK_ORDER[v as keyof typeof RANK_ORDER] ?? 0;
+		const selI = RANK_ORDER[selectedRank as keyof typeof RANK_ORDER];
+		if (selI === undefined || selI > maxI) setSelectedRank(null);
+	}, [data?.viewerHunterRank, selectedRank]);
+
 	useEffect(() => {
 		scrolledForUserIdRef.current = null;
 	}, [data?.rankBracket]);
@@ -122,14 +148,14 @@ export default function Leaderboard() {
 					</span>
 				</div>
 				<p className="text-white/55 text-sm md:text-base max-w-2xl">
-					Each Hunter rank (E through S) has its own board. You only compete with players in the same rank. After you
-					promote (for example E → D), you move to the next bracket. Sorting is by XP, then level and stats. Underdog
-					boost applies only on your own board when active.
+					Each Hunter rank has its own board. Tabs for ranks you have not reached yet stay hidden until you promote.
+					You only compete with players on the same rank. Sorting is by XP, then level and stats. Underdog boost applies
+					on your current-rank board when active.
 				</p>
 			</motion.div>
 
 			<div className="flex flex-wrap gap-2 mb-6">
-				{RANK_TABS.map((r) => (
+				{visibleRankTabs.map((r) => (
 					<Button
 						key={r}
 						type="button"
